@@ -3,42 +3,48 @@
  * 클래스명 : ChatApiController
  * =============================================================================
  * 목적
- *  - 사용자의 자연어 질문을 HTTP 요청으로 전달받는다.
+ *  - 로그인한 사용자의 자연어 질문을 HTTP 요청으로 전달받는다.
+ *  - Spring Security가 인증한 CurrentUser를 서버에서 직접 가져온다.
  *  - AiChatService를 호출하여 Gemini 답변을 생성한다.
- *  - 생성된 답변을 ChatResponse 형식으로 반환한다.
  */
 
 package com.example.enterpriseai.controller;
 
 import com.example.enterpriseai.dto.ChatRequest;
 import com.example.enterpriseai.dto.ChatResponse;
+import com.example.enterpriseai.security.CurrentUser;
+import com.example.enterpriseai.service.chat.AiChatService;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import com.example.enterpriseai.service.chat.AiChatService;
 
+// JSON 기반 채팅 API를 제공하는 Controller로 등록한다.
 @RestController
+
+// 이 Controller의 기본 URL을 /api/chat으로 지정한다.
 @RequestMapping("/api/chat")
 public class ChatApiController {
 
     private final AiChatService aiChatService;
 
-    // Spring이 관리하는 AiChatService를 생성자로 주입받는다.
     public ChatApiController(
             AiChatService aiChatService
     ) {
-        this.aiChatService =
-                aiChatService;
+        this.aiChatService = aiChatService;
     }
 
-    // 사용자 질문을 검증한 후 Gemini 답변을 반환한다.
+    // 로그인 사용자의 질문을 받고 Spring Security Principal을 함께 가져온다.
     @PostMapping
     public ResponseEntity<ChatResponse> chat(
+            @AuthenticationPrincipal CurrentUser currentUser,
             @Valid @RequestBody ChatRequest request
     ) {
+
+        // 현재는 Gemini 기본 호출만 수행하며 CurrentUser 연결 여부만 확인한다.
         String answer =
                 aiChatService.generateAnswer(
                         request.question()

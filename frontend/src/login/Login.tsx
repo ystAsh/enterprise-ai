@@ -118,7 +118,7 @@ function Login({
 
             <section className="login-box">
 
-                <h1>Enterprise AI</h1>
+                <h1>Enterprise</h1>
 
                 <p className="login-description">
                     사내 AI 시스템

@@ -165,6 +165,22 @@ public class AppUser {
         this.roles.add(role);
     }
 
+    // 로그인 성공 시 실패 횟수를 초기화하고 마지막 로그인 시간을 기록한다.
+    public void recordLoginSuccess() {
+        this.failedLoginCount = 0;
+        this.lastLoginAt = LocalDateTime.now();
+    }
+
+    // 로그인 실패 횟수를 증가시킨다.
+    // 5회 이상 실패하면 계정을 잠근다.
+    public void recordLoginFailure() {
+        this.failedLoginCount++;
+
+        if (this.failedLoginCount >= 5) {
+            this.accountLocked = true;
+        }
+    }
+
     public Long getUserId() {
         return userId;
     }
