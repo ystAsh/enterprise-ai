@@ -11,7 +11,7 @@
 
 import { useState } from 'react'
 import type { FormEventHandler } from 'react'
-import '../assets/css/chat/Chat.css'
+import '../assets/css/Chat.css'
 
 // Spring Security가 반환하는 CSRF 정보의 타입이다.
 type CsrfResponse = {
