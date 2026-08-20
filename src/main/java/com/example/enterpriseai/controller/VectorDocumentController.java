@@ -23,8 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.GetMapping;
-
 import java.net.URI;
+import java.util.List;
 
 // 문서 관리 REST API를 제공하는 Controller로 등록한다.
 @RestController
@@ -102,6 +102,33 @@ public class VectorDocumentController {
     }
 
     /*
+     * 업로드된 PDF 문서의 Chunk 분할 결과를 확인한다.
+     *
+     * 현재 Phase 6 Chunk 검증을 위한 임시 API이다.
+     * 실제 Document RAG에서는 Chunk 전체를 클라이언트에 반환하지 않는다.
+     */
+    @GetMapping("/{documentId}/chunks")
+    public ResponseEntity<ChunkResponse> chunks(
+            @PathVariable Long documentId,
+            @AuthenticationPrincipal CurrentUser currentUser
+    ) {
+
+        List<String> chunks =
+                vectorDocumentService.chunkPdf(
+                        documentId,
+                        currentUser
+                );
+
+        return ResponseEntity.ok(
+                new ChunkResponse(
+                        documentId,
+                        chunks.size(),
+                        chunks
+                )
+        );
+    }
+
+    /*
      * 업로드 성공 시 클라이언트에 반환할 최소 정보이다.
      *
      * storagePath, ownerId, organizationId 등의 내부 정보는
@@ -121,6 +148,16 @@ public class VectorDocumentController {
     public record ParseResponse(
             Long documentId,
             String text
+    ) {
+    }
+
+    /*
+     * Chunk 테스트 결과를 반환한다.
+     */
+    public record ChunkResponse(
+            Long documentId,
+            int chunkCount,
+            List<String> chunks
     ) {
     }
 }
