@@ -22,6 +22,8 @@ import com.example.enterpriseai.security.CurrentUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import java.nio.file.Path;
+import java.util.List;
 
 @Service
 public class VectorDocumentService {
@@ -31,19 +33,25 @@ public class VectorDocumentService {
     private final AppUserRepository appUserRepository;
     private final OrganizationRepository organizationRepository;
     private final DepartmentRepository departmentRepository;
+    private final PdfDocumentParser pdfDocumentParser;
+    private final DocumentChunkService documentChunkService;
 
     public VectorDocumentService(
             DocumentFileStorageService fileStorageService,
             VectorDocumentRepository vectorDocumentRepository,
             AppUserRepository appUserRepository,
             OrganizationRepository organizationRepository,
-            DepartmentRepository departmentRepository
+            DepartmentRepository departmentRepository,
+            PdfDocumentParser pdfDocumentParser,
+            DocumentChunkService documentChunkService
     ) {
         this.fileStorageService = fileStorageService;
         this.vectorDocumentRepository = vectorDocumentRepository;
         this.appUserRepository = appUserRepository;
         this.organizationRepository = organizationRepository;
         this.departmentRepository = departmentRepository;
+        this.pdfDocumentParser = pdfDocumentParser;
+        this.documentChunkService = documentChunkService;
     }
 
     /*
@@ -98,6 +106,105 @@ public class VectorDocumentService {
         );
 
         return vectorDocumentRepository.save(document);
+    }
+
+    /*
+     * 업로드된 PDF 문서를 읽어 텍스트를 추출한다.
+     *
+     * 문서를 읽기 전에 로그인 사용자의 조직, 부서,
+     * 보안등급 범위를 서버에서 다시 검증한다.
+     */
+    @Transactional(readOnly = true)
+    public String parsePdf(
+            Long documentId,
+            CurrentUser currentUser
+    ) {
+
+        VectorDocument document =
+                vectorDocumentRepository.findById(documentId)
+                        .orElseThrow(
+                                () -> new IllegalArgumentException(
+                                        "문서를 찾을 수 없습니다."
+                                )
+                        );
+
+        validateDocumentAccess(
+                document,
+                currentUser
+        );
+
+        return pdfDocumentParser.parse(
+                Path.of(document.getStoragePath())
+        );
+    }
+
+    /*
+     * 업로드된 PDF 문서를 읽고 Chunk 단위로 분할한다.
+     *
+     * 문서 접근 권한을 먼저 검증한 뒤
+     * Parser → Chunk 순서로 처리한다.
+     */
+    @Transactional(readOnly = true)
+    public List<String> chunkPdf(
+            Long documentId,
+            CurrentUser currentUser
+    ) {
+
+        VectorDocument document =
+                vectorDocumentRepository.findById(documentId)
+                        .orElseThrow(
+                                () -> new IllegalArgumentException(
+                                        "문서를 찾을 수 없습니다."
+                                )
+                        );
+
+        validateDocumentAccess(
+                document,
+                currentUser
+        );
+
+        String text =
+                pdfDocumentParser.parse(
+                        Path.of(document.getStoragePath())
+                );
+
+        return documentChunkService.split(text);
+    }
+
+    /*
+     * 문서 파싱 전에 로그인 사용자가 해당 문서에
+     * 접근할 수 있는지 서버에서 검증한다.
+     */
+    private void validateDocumentAccess(
+            VectorDocument document,
+            CurrentUser currentUser
+    ) {
+
+        if (!document.getOrganization()
+                .getOrganizationId()
+                .equals(currentUser.getOrganizationId())) {
+
+            throw new IllegalArgumentException(
+                    "해당 문서에 접근할 수 없습니다."
+            );
+        }
+
+        if (!document.getDepartment()
+                .getDepartmentId()
+                .equals(currentUser.getDepartmentId())) {
+
+            throw new IllegalArgumentException(
+                    "해당 문서에 접근할 수 없습니다."
+            );
+        }
+
+        if (document.getSecurityLevel()
+                > currentUser.getSecurityLevel()) {
+
+            throw new IllegalArgumentException(
+                    "해당 문서에 접근할 수 없습니다."
+            );
+        }
     }
 
     /*
