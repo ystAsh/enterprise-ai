@@ -1,0 +1,132 @@
+2026-08-21 15:13:38.303 DEBUG - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-21 15:20:56.667 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-21 15:21:49.295 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-21 15:22:09.855 DEBUG org.hibernate.SQL - 
+    select
+        au1_0.user_id,
+        au1_0.account_locked,
+        au1_0.department_id,
+        d1_0.department_id,
+        d1_0.department_code,
+        d1_0.department_name,
+        d1_0.enabled,
+        d1_0.organization_id,
+        au1_0.enabled,
+        au1_0.failed_login_count,
+        au1_0.last_login_at,
+        au1_0.organization_id,
+        o2_0.organization_id,
+        o2_0.enabled,
+        o2_0.organization_code,
+        o2_0.organization_name,
+        au1_0.password_changed_at,
+        au1_0.password_hash,
+        r1_0.user_id,
+        r1_1.role_id,
+        r1_1.enabled,
+        r1_1.role_code,
+        r1_1.role_name,
+        au1_0.security_level,
+        au1_0.username 
+    from
+        app_users au1_0 
+    join
+        departments d1_0 
+            on d1_0.department_id=au1_0.department_id 
+    join
+        organizations o2_0 
+            on o2_0.organization_id=au1_0.organization_id 
+    left join
+        user_roles r1_0 
+            on au1_0.user_id=r1_0.user_id 
+    left join
+        roles r1_1 
+            on r1_1.role_id=r1_0.role_id 
+    where
+        au1_0.username=?
+2026-08-21 15:22:09.950 DEBUG org.hibernate.SQL - 
+    select
+        au1_0.user_id,
+        au1_0.account_locked,
+        au1_0.department_id,
+        d1_0.department_id,
+        d1_0.department_code,
+        d1_0.department_name,
+        d1_0.enabled,
+        d1_0.organization_id,
+        au1_0.enabled,
+        au1_0.failed_login_count,
+        au1_0.last_login_at,
+        au1_0.organization_id,
+        o2_0.organization_id,
+        o2_0.enabled,
+        o2_0.organization_code,
+        o2_0.organization_name,
+        au1_0.password_changed_at,
+        au1_0.password_hash,
+        r1_0.user_id,
+        r1_1.role_id,
+        r1_1.enabled,
+        r1_1.role_code,
+        r1_1.role_name,
+        au1_0.security_level,
+        au1_0.username 
+    from
+        app_users au1_0 
+    join
+        departments d1_0 
+            on d1_0.department_id=au1_0.department_id 
+    join
+        organizations o2_0 
+            on o2_0.organization_id=au1_0.organization_id 
+    left join
+        user_roles r1_0 
+            on au1_0.user_id=r1_0.user_id 
+    left join
+        roles r1_1 
+            on r1_1.role_id=r1_0.role_id 
+    where
+        au1_0.username=?
+2026-08-21 15:22:09.963 DEBUG org.hibernate.SQL - 
+    update
+        app_users 
+    set
+        account_locked=?,
+        department_id=?,
+        enabled=?,
+        failed_login_count=?,
+        last_login_at=?,
+        organization_id=?,
+        password_changed_at=?,
+        password_hash=?,
+        security_level=?,
+        username=? 
+    where
+        user_id=?
+2026-08-21 15:22:14.970 DEBUG org.hibernate.SQL - 
+    select
+        count_big(e1_0.employee_id) 
+    from
+        employees e1_0 
+    where
+        e1_0.organization_id=? 
+        and e1_0.department_id=? 
+        and e1_0.active=1
