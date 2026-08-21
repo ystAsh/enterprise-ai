@@ -19,11 +19,13 @@ import com.example.enterpriseai.repository.DepartmentRepository;
 import com.example.enterpriseai.repository.OrganizationRepository;
 import com.example.enterpriseai.repository.VectorDocumentRepository;
 import com.example.enterpriseai.security.CurrentUser;
+import com.example.enterpriseai.service.vector.DocumentEmbeddingService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import java.nio.file.Path;
 import java.util.List;
+import org.springframework.ai.document.Document;
 
 @Service
 public class VectorDocumentService {
@@ -35,6 +37,7 @@ public class VectorDocumentService {
     private final DepartmentRepository departmentRepository;
     private final PdfDocumentParser pdfDocumentParser;
     private final DocumentChunkService documentChunkService;
+    private final DocumentEmbeddingService documentEmbeddingService;
 
     public VectorDocumentService(
             DocumentFileStorageService fileStorageService,
@@ -43,7 +46,8 @@ public class VectorDocumentService {
             OrganizationRepository organizationRepository,
             DepartmentRepository departmentRepository,
             PdfDocumentParser pdfDocumentParser,
-            DocumentChunkService documentChunkService
+            DocumentChunkService documentChunkService,
+            DocumentEmbeddingService documentEmbeddingService
     ) {
         this.fileStorageService = fileStorageService;
         this.vectorDocumentRepository = vectorDocumentRepository;
@@ -52,6 +56,7 @@ public class VectorDocumentService {
         this.departmentRepository = departmentRepository;
         this.pdfDocumentParser = pdfDocumentParser;
         this.documentChunkService = documentChunkService;
+        this.documentEmbeddingService = documentEmbeddingService;
     }
 
     /*
@@ -142,10 +147,10 @@ public class VectorDocumentService {
      * 업로드된 PDF 문서를 읽고 Chunk 단위로 분할한다.
      *
      * 문서 접근 권한을 먼저 검증한 뒤
-     * Parser → Chunk 순서로 처리한다.
+     * Parser → Chunk → Metadata 구성 순서로 처리한다.
      */
     @Transactional(readOnly = true)
-    public List<String> chunkPdf(
+    public List<org.springframework.ai.document.Document> chunkPdf(
             Long documentId,
             CurrentUser currentUser
     ) {
@@ -158,53 +163,76 @@ public class VectorDocumentService {
                                 )
                         );
 
+        // 문서를 읽기 전에 서버에서 접근 권한을 검증한다.
         validateDocumentAccess(
                 document,
                 currentUser
         );
 
+        // 실제 저장된 PDF에서 전체 텍스트를 추출한다.
         String text =
                 pdfDocumentParser.parse(
                         Path.of(document.getStoragePath())
                 );
 
-        return documentChunkService.split(text);
+        // MSSQL 문서 관리 정보를 Chunk Metadata에 연결한다.
+        return documentChunkService.split(
+                text,
+                document.getDocumentId(),
+                document.getOrganization().getOrganizationId(),
+                document.getDepartment().getDepartmentId(),
+                document.getSecurityLevel(),
+                document.getOriginalFileName()
+        );
     }
 
     /*
-     * 문서 파싱 전에 로그인 사용자가 해당 문서에
-     * 접근할 수 있는지 서버에서 검증한다.
+     * 업로드된 PDF 문서를 파싱하고 Chunk로 분할한 뒤
+     * Spring AI VectorStore를 통해 Embedding 및 PGVector 저장을 수행한다.
+     *
+     * 권한 검증을 통과한 문서만 Embedding 대상으로 사용한다.
      */
-    private void validateDocumentAccess(
-            VectorDocument document,
+    @Transactional(readOnly = true)
+    public int embedPdf(
+            Long documentId,
             CurrentUser currentUser
     ) {
 
-        if (!document.getOrganization()
-                .getOrganizationId()
-                .equals(currentUser.getOrganizationId())) {
+        VectorDocument document =
+                vectorDocumentRepository.findById(documentId)
+                        .orElseThrow(
+                                () -> new IllegalArgumentException(
+                                        "문서를 찾을 수 없습니다."
+                                )
+                        );
 
-            throw new IllegalArgumentException(
-                    "해당 문서에 접근할 수 없습니다."
-            );
-        }
+        // 권한 없는 문서는 Parser/Embedding 단계로 전달하지 않는다.
+        validateDocumentAccess(
+                document,
+                currentUser
+        );
 
-        if (!document.getDepartment()
-                .getDepartmentId()
-                .equals(currentUser.getDepartmentId())) {
+        // 저장된 PDF에서 전체 텍스트를 추출한다.
+        String text =
+                pdfDocumentParser.parse(
+                        Path.of(document.getStoragePath())
+                );
 
-            throw new IllegalArgumentException(
-                    "해당 문서에 접근할 수 없습니다."
-            );
-        }
+        // MSSQL의 검증된 문서정보를 Metadata로 사용하여 Chunk를 생성한다.
+        List<Document> chunks =
+                documentChunkService.split(
+                        text,
+                        document.getDocumentId(),
+                        document.getOrganization().getOrganizationId(),
+                        document.getDepartment().getDepartmentId(),
+                        document.getSecurityLevel(),
+                        document.getOriginalFileName()
+                );
 
-        if (document.getSecurityLevel()
-                > currentUser.getSecurityLevel()) {
+        // VectorStore.add()를 통해 Embedding 생성 및 PGVector 저장을 수행한다.
+        documentEmbeddingService.store(chunks);
 
-            throw new IllegalArgumentException(
-                    "해당 문서에 접근할 수 없습니다."
-            );
-        }
+        return chunks.size();
     }
 
     /*
@@ -225,6 +253,48 @@ public class VectorDocumentService {
         if (documentSecurityLevel > currentUser.getSecurityLevel()) {
             throw new IllegalArgumentException(
                     "사용자 보안등급보다 높은 문서를 등록할 수 없습니다."
+            );
+        }
+    }
+
+    /*
+     * 문서를 읽거나 처리하기 전에
+     * 로그인 사용자의 문서 접근 권한을 검증한다.
+     *
+     * organizationId, departmentId, securityLevel은
+     * 클라이언트나 LLM의 값을 사용하지 않는다.
+     */
+    private void validateDocumentAccess(
+            VectorDocument document,
+            CurrentUser currentUser
+    ) {
+
+        // 다른 조직의 문서는 접근할 수 없다.
+        if (!document.getOrganization()
+                .getOrganizationId()
+                .equals(currentUser.getOrganizationId())) {
+
+            throw new IllegalArgumentException(
+                    "해당 문서에 접근할 수 없습니다."
+            );
+        }
+
+        // 다른 부서의 문서는 접근할 수 없다.
+        if (!document.getDepartment()
+                .getDepartmentId()
+                .equals(currentUser.getDepartmentId())) {
+
+            throw new IllegalArgumentException(
+                    "해당 문서에 접근할 수 없습니다."
+            );
+        }
+
+        // 자신의 Security Level보다 높은 문서는 접근할 수 없다.
+        if (document.getSecurityLevel()
+                > currentUser.getSecurityLevel()) {
+
+            throw new IllegalArgumentException(
+                    "해당 문서에 접근할 수 없습니다."
             );
         }
     }
