@@ -249,3 +249,17 @@
         app_users au1_0 
     where
         au1_0.username=?
+2026-08-24 16:18:39.005 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 16:18:41.916 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
