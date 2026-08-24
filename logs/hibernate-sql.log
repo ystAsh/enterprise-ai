@@ -1,25 +1,81 @@
-2026-08-21 15:13:38.303 DEBUG - 
+2026-08-24 11:08:21.458 DEBUG org.hibernate.SQL - 
     select
         top (?) au1_0.user_id 
     from
         app_users au1_0 
     where
         au1_0.username=?
-2026-08-21 15:20:56.667 DEBUG org.hibernate.SQL - 
+2026-08-24 11:13:59.114 DEBUG org.hibernate.SQL - 
     select
         top (?) au1_0.user_id 
     from
         app_users au1_0 
     where
         au1_0.username=?
-2026-08-21 15:21:49.295 DEBUG org.hibernate.SQL - 
+2026-08-24 11:14:04.141 DEBUG org.hibernate.SQL - 
     select
         top (?) au1_0.user_id 
     from
         app_users au1_0 
     where
         au1_0.username=?
-2026-08-21 15:22:09.855 DEBUG org.hibernate.SQL - 
+2026-08-24 11:14:07.745 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 11:30:31.443 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 11:30:37.963 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 11:30:46.703 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 11:30:52.417 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:19:26.704 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:22:01.460 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:22:04.543 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:22:56.192 DEBUG org.hibernate.SQL - 
     select
         au1_0.user_id,
         au1_0.account_locked,
@@ -62,7 +118,7 @@
             on r1_1.role_id=r1_0.role_id 
     where
         au1_0.username=?
-2026-08-21 15:22:09.950 DEBUG org.hibernate.SQL - 
+2026-08-24 15:22:56.308 DEBUG org.hibernate.SQL - 
     select
         au1_0.user_id,
         au1_0.account_locked,
@@ -105,7 +161,7 @@
             on r1_1.role_id=r1_0.role_id 
     where
         au1_0.username=?
-2026-08-21 15:22:09.963 DEBUG org.hibernate.SQL - 
+2026-08-24 15:22:56.331 DEBUG org.hibernate.SQL - 
     update
         app_users 
     set
@@ -121,7 +177,7 @@
         username=? 
     where
         user_id=?
-2026-08-21 15:22:14.970 DEBUG org.hibernate.SQL - 
+2026-08-24 15:23:00.144 DEBUG org.hibernate.SQL - 
     select
         count_big(e1_0.employee_id) 
     from
@@ -130,3 +186,66 @@
         e1_0.organization_id=? 
         and e1_0.department_id=? 
         and e1_0.active=1
+2026-08-24 15:23:00.192 DEBUG org.hibernate.SQL - 
+    insert 
+    into
+        ai_query_audit_logs
+        (elapsed_ms, executed_at, execution_type, parameterized_sql, query_key, query_type, result_count, success) 
+    values
+        (?, ?, ?, ?, ?, ?, ?, ?)
+2026-08-24 15:39:58.053 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:40:00.785 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:57:53.241 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 15:57:57.930 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 16:08:36.316 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 16:08:38.956 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 16:11:16.843 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?
+2026-08-24 16:11:19.565 DEBUG org.hibernate.SQL - 
+    select
+        top (?) au1_0.user_id 
+    from
+        app_users au1_0 
+    where
+        au1_0.username=?

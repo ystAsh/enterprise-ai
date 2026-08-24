@@ -229,10 +229,14 @@ public class VectorDocumentController {
      * Database RAG 검증 API
      * =============================================================================
      * 목적
-     *  - 로그인 사용자의 조직/부서 범위에서 검증된 업무 Query를 실행한다.
-     *  - 조회 결과를 공통 DatabaseQueryResult로 변환한다.
-     *  - DatabaseRagService는 검증된 결과를 기반으로 자연어 답변만 생성한다.
-     *  - 사용자에게 공개 가능한 안전한 조회 근거를 evidence로 반환한다.
+     *  - 현재 Phase 10 Database RAG 연결 상태를 검증한다.
+     *  - 조회 결과를 공통 DatabaseQueryResult로 전달한다.
+     *  - DatabaseRagService는 검증 완료 결과를 기반으로 답변만 생성한다.
+     *  - 사용자에게 공개 가능한 안전한 evidence만 반환한다.
+     *
+     * 주의
+     *  - 현재 employee-count URL과 Query 호출은 기존 Phase 10 테스트용이다.
+     *  - 공통 AI/RAG 검증 계층의 업무 모델로 사용하지 않는다.
      */
     @GetMapping("/database/rag/employee-count")
     public ResponseEntity<DatabaseRagResponse> databaseRagEmployeeCount(
