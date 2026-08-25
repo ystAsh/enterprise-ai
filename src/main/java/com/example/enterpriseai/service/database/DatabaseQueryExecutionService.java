@@ -5,6 +5,7 @@
  * 목적
  *  - Database RAG의 공통 Query 실행 흐름을 관리한다.
  *  - 서버에 등록된 Query만 실행하고 실행 전/후 보안 검증을 강제한다.
+ *  - 검증 완료된 실행 파라미터를 Executor에 전달한다.
  *  - 검증 완료 결과만 DatabaseQueryResult로 변환한다.
  *  - Query 실행 및 검증 상태를 내부 Audit Log에 기록한다.
  *  - 특정 회사, 업무, 테이블, Repository, Mapper에 종속되지 않는다.
@@ -13,6 +14,7 @@
 package com.example.enterpriseai.service.database;
 
 import com.example.enterpriseai.dto.DatabaseQueryDefinition;
+import com.example.enterpriseai.dto.DatabaseQueryParameters;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
 import com.example.enterpriseai.security.CurrentUser;
 import com.example.enterpriseai.service.security.DatabaseQueryValidator;
@@ -58,23 +60,29 @@ public class DatabaseQueryExecutionService {
      * 서버에 등록된 Query를 실행하고
      * 검증 완료 결과만 반환한다.
      *
-     * queryKey는 실행 요청의 식별값일 뿐이며
-     * 실제 실행 정보와 보안 정책은 서버 Registry에서 가져온다.
+     * queryKey:
+     *  - 실행할 서버 등록 Query 식별자
+     *
+     * parameters:
+     *  - 현재 질문에서 추출되고 검증된 실행 조건
+     *
+     * currentUser:
+     *  - Spring Security가 생성한 서버 권한 정보
      */
     public DatabaseQueryResult execute(
             String queryKey,
+            DatabaseQueryParameters parameters,
             CurrentUser currentUser
     ) {
 
-        validateCurrentUser(
+        validateInput(
+                parameters,
                 currentUser
         );
 
         /*
-         * 등록되지 않은 queryKey는 여기서 즉시 차단된다.
-         *
-         * 클라이언트나 LLM이 전달한 executionType,
-         * ValidationPolicy 등을 신뢰하지 않는다.
+         * 실제 실행 정보와 정책은
+         * 클라이언트나 LLM이 아니라 서버 Registry에서 가져온다.
          */
         DatabaseQueryDefinition definition =
                 definitionRegistry.getRequired(
@@ -106,6 +114,7 @@ public class DatabaseQueryExecutionService {
             rawResult =
                     executor.execute(
                             definition,
+                            parameters,
                             currentUser
                     );
 
@@ -175,12 +184,6 @@ public class DatabaseQueryExecutionService {
          * =============================================================================
          * 4. 성공 Audit Log
          * =============================================================================
-         *
-         * 공통 실행 계층은 실제 SQL을 알지 못한다.
-         * 따라서 parameterizedSql은 null로 저장한다.
-         *
-         * JdbcClient / Query Builder의 실제 parameterized SQL 기록은
-         * 해당 실행 계층에서 별도로 연결할 수 있다.
          */
         auditLogService.save(
                 definition.queryType(),
@@ -197,13 +200,18 @@ public class DatabaseQueryExecutionService {
     }
 
     /*
-     * Spring Security에서 생성한 CurrentUser가 반드시 필요하다.
-     *
-     * 인증 정보가 없는 상태에서는 DB Query 실행을 시작하지 않는다.
+     * Query 실행 전에 반드시 필요한 입력을 확인한다.
      */
-    private void validateCurrentUser(
+    private void validateInput(
+            DatabaseQueryParameters parameters,
             CurrentUser currentUser
     ) {
+
+        if (parameters == null) {
+            throw new IllegalArgumentException(
+                    "Query 실행 파라미터가 없습니다."
+            );
+        }
 
         if (currentUser == null) {
             throw new SecurityException(
