@@ -7,7 +7,7 @@
 목적
  - Hibernate가 생성한 SQL을 개발/장애 분석용 파일에 기록한다.
  - 실제 JDBC 바인딩 파라미터 값은 기록하지 않는다.
- - 로그를 날짜/용량 기준으로 순환하고 14일 후 자동 삭제한다.
+ - 로그를 날짜/용량 기준으로 순환하고 30일 후 자동 삭제한다.
  - SQL 로그를 일반 애플리케이션 로그와 분리한다.
 =============================================================================
 -->
@@ -44,13 +44,13 @@
             <!-- 파일 하나의 최대 크기 -->
             <maxFileSize>20MB</maxFileSize>
 
-            <!-- 보안상 장기 보관하지 않고 14일만 유지 -->
-            <maxHistory>14</maxHistory>
+            <!-- 30일 보관 후 자동 삭제 -->
+            <maxHistory>30</maxHistory>
 
             <!-- SQL 로그 전체 용량 제한 -->
             <totalSizeCap>500MB</totalSizeCap>
 
-            <!-- 시작 시에도 오래된 로그 정리 -->
+            <!-- 애플리케이션 시작 시 오래된 로그도 정리 -->
             <cleanHistoryOnStart>true</cleanHistoryOnStart>
 
         </rollingPolicy>
@@ -67,7 +67,7 @@
     <!--
         Hibernate가 생성한 SQL만 기록한다.
 
-        실제 파라미터 값을 출력하는
+        실제 바인딩 값을 출력하는
         org.hibernate.orm.jdbc.bind TRACE logger는
         의도적으로 설정하지 않는다.
     -->
