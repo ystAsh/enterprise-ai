@@ -4,8 +4,7 @@
  * =============================================================================
  * 목적
  *  - Database RAG에서 서버가 허용한 Query의 공통 정의를 표현한다.
- *  - Query 실행 전 보안 정책, Query 파라미터 정책,
- *    실행 후 결과 검증 정책을 함께 관리한다.
+ *  - Query 실행 전 보안 정책과 실행 후 결과 검증 정책을 함께 관리한다.
  *  - 특정 회사, 업무, 테이블 구조에 종속되지 않는다.
  */
 
@@ -30,9 +29,6 @@ public record DatabaseQueryDefinition(
 
         // Query 실행 전에 적용할 서버 보안 정책
         DatabaseQueryExecutionPolicy executionPolicy,
-
-        // Query 실행에 사용할 파라미터 정책
-        DatabaseQueryParameterPolicy parameterPolicy,
 
         // Query 실행 결과에 적용할 공통 보안 검증 정책
         DatabaseValidationPolicy validationPolicy
@@ -74,12 +70,6 @@ public record DatabaseQueryDefinition(
         if (executionPolicy == null) {
             throw new IllegalArgumentException(
                     "Query 실행 보안 정책이 없습니다."
-            );
-        }
-
-        if (parameterPolicy == null) {
-            throw new IllegalArgumentException(
-                    "Query 파라미터 정책이 없습니다."
             );
         }
 
