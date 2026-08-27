@@ -5,10 +5,15 @@
  * 목적
  *  - Database RAG에서 서버가 허용한 Query의 공통 정의를 표현한다.
  *  - Query 실행 전 보안 정책과 실행 후 결과 검증 정책을 함께 관리한다.
+ *  - Query 실행에 허용된 파라미터 이름을 서버에서 관리한다.
  *  - 특정 회사, 업무, 테이블 구조에 종속되지 않는다.
  */
 
 package com.example.enterpriseai.dto;
+
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
 
 public record DatabaseQueryDefinition(
 
@@ -26,6 +31,9 @@ public record DatabaseQueryDefinition(
 
         // JPA_REPOSITORY / MYBATIS / JDBC_CLIENT 등의 실행 방식
         String executionType,
+
+        // Query 실행에 사용할 수 있는 서버 허용 파라미터 이름
+        Set<String> allowedParameterKeys,
 
         // Query 실행 전에 적용할 서버 보안 정책
         DatabaseQueryExecutionPolicy executionPolicy,
@@ -64,6 +72,14 @@ public record DatabaseQueryDefinition(
         if (executionType == null || executionType.isBlank()) {
             throw new IllegalArgumentException(
                     "Query 실행 방식이 없습니다."
+            );
+        }
+
+        if (allowedParameterKeys == null) {
+            allowedParameterKeys = Set.of();
+        } else {
+            allowedParameterKeys = Collections.unmodifiableSet(
+                    new HashSet<>(allowedParameterKeys)
             );
         }
 
