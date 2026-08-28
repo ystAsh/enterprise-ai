@@ -29,14 +29,9 @@ import java.util.concurrent.TimeUnit;
 @Service
 public class DatabaseQueryExecutionService {
 
-    private static final String VALIDATION_PASSED =
-            "PASSED";
-
-    private static final String VALIDATION_FAILED =
-            "FAILED";
-
-    private static final String VALIDATION_SKIPPED =
-            "SKIPPED";
+    private static final String VALIDATION_PASSED = "PASSED";
+    private static final String VALIDATION_FAILED = "FAILED";
+    private static final String VALIDATION_SKIPPED = "SKIPPED";
 
     private final DatabaseQueryDefinitionRegistry definitionRegistry;
     private final DatabaseQueryValidator queryValidator;
@@ -58,57 +53,52 @@ public class DatabaseQueryExecutionService {
         this.auditLogService = auditLogService;
     }
 
-    /*
-     * 서버에 등록된 Query를 실행하고
-     * 검증 완료 결과만 반환한다.
-     */
+    // 서버에 등록된 Query를 실행하고 검증 완료 결과만 반환한다.
     public DatabaseQueryResult execute(
             String queryKey,
             DatabaseQueryParameters parameters,
             CurrentUser currentUser
     ) {
-
-        validateInput(
-                parameters,
-                currentUser
-        );
+        validateInput(parameters, currentUser);
 
         DatabaseQueryDefinition definition =
-                definitionRegistry.getRequired(
-                        queryKey
-                );
+                definitionRegistry.getRequired(queryKey);
 
-        long startedAt =
-                System.nanoTime();
+        long startedAt = System.nanoTime();
 
-        DatabaseQueryExecutionResult executionResult;
-
-        /*
-         * =============================================================================
-         * 1. 조회 전 검증 + Query 실행
-         * =============================================================================
-         */
+        // 1. 조회 전 Query 검증
         try {
-
             queryValidator.validate(
                     definition,
                     definition.executionPolicy()
             );
 
-            DatabaseQueryExecutor executor =
-                    executorResolver.resolve(
-                            definition
-                    );
+        } catch (RuntimeException e) {
+            safeAuditFailure(
+                    definition,
+                    null,
+                    VALIDATION_FAILED,
+                    startedAt,
+                    e
+            );
 
-            executionResult =
-                    executor.execute(
-                            definition,
-                            parameters,
-                            currentUser
-                    );
+            throw e;
+        }
+
+        // 2. Executor 선택 + Query 실행
+        DatabaseQueryExecutionResult executionResult;
+
+        try {
+            DatabaseQueryExecutor executor =
+                    executorResolver.resolve(definition);
+
+            executionResult = executor.execute(
+                    definition,
+                    parameters,
+                    currentUser
+            );
 
         } catch (RuntimeException e) {
-
             safeAuditFailure(
                     definition,
                     null,
@@ -120,23 +110,16 @@ public class DatabaseQueryExecutionService {
             throw e;
         }
 
-        /*
-         * =============================================================================
-         * 2. 조회 결과 검증
-         * =============================================================================
-         */
+        // 3. 조회 결과 검증
         Map<String, Object> validatedResult;
 
         try {
-
-            validatedResult =
-                    resultValidator.validate(
-                            executionResult.data(),
-                            definition.validationPolicy()
-                    );
+            validatedResult = resultValidator.validate(
+                    executionResult.data(),
+                    definition.validationPolicy()
+            );
 
         } catch (RuntimeException e) {
-
             safeAuditFailure(
                     definition,
                     (long) executionResult.returnedCount(),
@@ -148,22 +131,14 @@ public class DatabaseQueryExecutionService {
             throw e;
         }
 
-        /*
-         * =============================================================================
-         * 3. 검증 완료 결과 Metadata 생성
-         * =============================================================================
-         */
+        // 4. 검증 완료 결과 Metadata 생성
         DatabaseQueryResultMetadata metadata =
                 new DatabaseQueryResultMetadata(
                         executionResult.returnedCount(),
                         executionResult.totalCount()
                 );
 
-        /*
-         * =============================================================================
-         * 4. 검증 완료 Evidence 생성
-         * =============================================================================
-         */
+        // 5. 검증 완료 Evidence 생성
         DatabaseQueryResult.Evidence evidence =
                 new DatabaseQueryResult.Evidence(
                         definition.source(),
@@ -173,11 +148,7 @@ public class DatabaseQueryExecutionService {
                         true
                 );
 
-        /*
-         * =============================================================================
-         * 5. 검증 완료 결과 생성
-         * =============================================================================
-         */
+        // 6. 검증 완료 결과 생성
         DatabaseQueryResult queryResult =
                 new DatabaseQueryResult(
                         definition.queryType(),
@@ -186,11 +157,7 @@ public class DatabaseQueryExecutionService {
                         evidence
                 );
 
-        /*
-         * =============================================================================
-         * 6. 성공 Audit Log
-         * =============================================================================
-         */
+        // 7. 성공 Audit Log
         auditLogService.save(
                 definition.queryType(),
                 definition.queryKey(),
@@ -205,14 +172,11 @@ public class DatabaseQueryExecutionService {
         return queryResult;
     }
 
-    /*
-     * Query 실행 전에 반드시 필요한 입력을 확인한다.
-     */
+    // Query 실행 전에 반드시 필요한 입력을 확인한다.
     private void validateInput(
             DatabaseQueryParameters parameters,
             CurrentUser currentUser
     ) {
-
         if (parameters == null) {
             throw new IllegalArgumentException(
                     "Query 실행 파라미터가 없습니다."
@@ -226,12 +190,7 @@ public class DatabaseQueryExecutionService {
         }
     }
 
-    /*
-     * 실패한 Query 실행/검증을 Audit Log에 기록한다.
-     *
-     * Audit 저장 실패가 원래 Query 예외를 덮어쓰지 않도록
-     * suppressed exception으로 추가한다.
-     */
+    // Audit 저장 실패가 원래 Query 예외를 덮어쓰지 않도록 suppressed exception으로 추가한다.
     private void safeAuditFailure(
             DatabaseQueryDefinition definition,
             Long resultCount,
@@ -239,9 +198,7 @@ public class DatabaseQueryExecutionService {
             long startedAt,
             RuntimeException originalException
     ) {
-
         try {
-
             auditLogService.save(
                     definition.queryType(),
                     definition.queryKey(),
@@ -254,20 +211,12 @@ public class DatabaseQueryExecutionService {
             );
 
         } catch (RuntimeException auditException) {
-
-            originalException.addSuppressed(
-                    auditException
-            );
+            originalException.addSuppressed(auditException);
         }
     }
 
-    /*
-     * Query 실행 시작 이후 경과 시간을 millisecond로 계산한다.
-     */
-    private long elapsedMs(
-            long startedAt
-    ) {
-
+    // Query 실행 시작 이후 경과 시간을 millisecond로 계산한다.
+    private long elapsedMs(long startedAt) {
         return TimeUnit.NANOSECONDS.toMillis(
                 System.nanoTime() - startedAt
         );
