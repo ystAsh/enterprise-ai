@@ -8,13 +8,7 @@
  *  - DocumentUpload.css와 분리하여 화면 구조와 스타일 책임을 구분한다.
  */
 
-import {
-    ChangeEvent,
-    DragEvent,
-    useRef,
-    useState
-} from 'react'
-
+import { ChangeEvent, DragEvent, useRef, useState } from 'react'
 import '../assets/css/DocumentUpload.css'
 
 type MessageType = 'success' | 'error' | 'info'
@@ -40,18 +34,12 @@ function DocumentUpload() {
     }
 
     // 파일 선택창에서 파일을 선택했을 때 처리한다.
-    const handleFileChange = (
-        event: ChangeEvent<HTMLInputElement>
-    ) => {
-        selectFile(
-            event.target.files?.[0] ?? null
-        )
+    const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+        selectFile(event.target.files?.[0] ?? null)
     }
 
     // 파일이 드롭 영역 위에 있을 때 기본 브라우저 동작을 막는다.
-    const handleDragOver = (
-        event: DragEvent<HTMLDivElement>
-    ) => {
+    const handleDragOver = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault()
         setDragging(true)
     }
@@ -62,15 +50,11 @@ function DocumentUpload() {
     }
 
     // 드래그한 파일을 실제 선택 파일로 등록한다.
-    const handleDrop = (
-        event: DragEvent<HTMLDivElement>
-    ) => {
+    const handleDrop = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault()
         setDragging(false)
 
-        const droppedFile =
-            event.dataTransfer.files?.[0] ?? null
-
+        const droppedFile = event.dataTransfer.files?.[0] ?? null
         selectFile(droppedFile)
     }
 
@@ -116,58 +100,40 @@ function DocumentUpload() {
 
         try {
             // POST 요청에 사용할 CSRF 토큰을 서버에서 조회한다.
-            const csrfResponse = await fetch(
-                '/api/auth/csrf',
-                {
-                    method: 'GET',
-                    credentials: 'include'
-                }
-            )
+            const csrfResponse = await fetch('/api/auth/csrf', {
+                method: 'GET',
+                credentials: 'include'
+            })
 
             if (!csrfResponse.ok) {
-                throw new Error(
-                    '보안 토큰을 가져오지 못했습니다.'
-                )
+                throw new Error('보안 토큰을 가져오지 못했습니다.')
             }
 
             const csrf = await csrfResponse.json()
-
             const formData = new FormData()
 
-            formData.append(
-                'file',
-                file
-            )
+            formData.append('file', file)
+            formData.append('securityLevel', String(securityLevel))
 
-            formData.append(
-                'securityLevel',
-                String(securityLevel)
-            )
+            const response = await fetch('/api/documents', {
+                method: 'POST',
 
-            const response = await fetch(
-                '/api/documents',
-                {
-                    method: 'POST',
+                // Spring Security 로그인 세션 쿠키를 함께 전송한다.
+                credentials: 'include',
 
-                    // Spring Security 로그인 세션 쿠키를 함께 전송한다.
-                    credentials: 'include',
+                // CSRF 토큰을 Spring Security가 요구하는 헤더에 넣는다.
+                headers: {
+                    [csrf.headerName]: csrf.token
+                },
 
-                    // CSRF 토큰을 Spring Security가 요구하는 헤더에 넣는다.
-                    headers: {
-                        [csrf.headerName]: csrf.token
-                    },
-
-                    body: formData
-                }
-            )
+                body: formData
+            })
 
             if (!response.ok) {
-                const errorText =
-                    await response.text()
+                const errorText = await response.text()
 
                 throw new Error(
-                    errorText ||
-                    '문서 업로드에 실패했습니다.'
+                    errorText || '문서 업로드에 실패했습니다.'
                 )
             }
 
@@ -187,17 +153,13 @@ function DocumentUpload() {
             }
 
         } catch (error) {
-            console.error(
-                '문서 업로드 실패',
-                error
-            )
+            console.error('문서 업로드 실패', error)
 
             setMessage({
                 type: 'error',
-                text:
-                    error instanceof Error
-                        ? error.message
-                        : '문서 업로드 중 오류가 발생했습니다.'
+                text: error instanceof Error
+                    ? error.message
+                    : '문서 업로드 중 오류가 발생했습니다.'
             })
 
         } finally {
@@ -207,11 +169,8 @@ function DocumentUpload() {
 
     return (
         <div className="document-upload-page">
-
             <div className="document-upload-container">
-
                 <div className="document-upload-header">
-
                     <h1 className="document-upload-title">
                         문서 업로드
                     </h1>
@@ -220,11 +179,9 @@ function DocumentUpload() {
                         사내 문서를 등록하고 보안등급을 설정합니다.
                         업로드된 문서는 권한 범위에 따라 관리됩니다.
                     </p>
-
                 </div>
 
                 <div className="document-upload-card">
-
                     <span className="document-upload-label">
                         파일 선택
                     </span>
@@ -238,11 +195,8 @@ function DocumentUpload() {
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
-                        onClick={() =>
-                            fileInputRef.current?.click()
-                        }
+                        onClick={() => fileInputRef.current?.click()}
                     >
-
                         <input
                             ref={fileInputRef}
                             className="document-file-input"
@@ -250,9 +204,7 @@ function DocumentUpload() {
                             onChange={handleFileChange}
                         />
 
-                        <div className="document-upload-icon">
-                            ↑
-                        </div>
+                        <div className="document-upload-icon">↑</div>
 
                         <div className="document-drop-title">
                             파일을 끌어놓거나 클릭해서 선택하세요
@@ -261,14 +213,11 @@ function DocumentUpload() {
                         <div className="document-drop-description">
                             현재 단계에서는 업로드 기능만 검증합니다.
                         </div>
-
                     </div>
 
                     {file && (
                         <div className="document-selected-file">
-
                             <div className="document-selected-file-info">
-
                                 <div className="document-selected-file-name">
                                     {file.name}
                                 </div>
@@ -276,25 +225,22 @@ function DocumentUpload() {
                                 <div className="document-selected-file-size">
                                     {formatFileSize(file.size)}
                                 </div>
-
                             </div>
 
                             <button
                                 type="button"
                                 className="document-remove-button"
-                                onClick={(event) => {
+                                onClick={event => {
                                     event.stopPropagation()
                                     removeFile()
                                 }}
                             >
                                 제거
                             </button>
-
                         </div>
                     )}
 
                     <div className="document-security-section">
-
                         <label
                             htmlFor="securityLevel"
                             className="document-security-label"
@@ -306,38 +252,21 @@ function DocumentUpload() {
                             id="securityLevel"
                             className="document-security-select"
                             value={securityLevel}
-                            onChange={(event) =>
-                                setSecurityLevel(
-                                    Number(event.target.value)
-                                )
+                            onChange={event =>
+                                setSecurityLevel(Number(event.target.value))
                             }
                         >
-                            <option value={1}>
-                                LEVEL 1 - 일반
-                            </option>
-
-                            <option value={2}>
-                                LEVEL 2 - 부서 업무
-                            </option>
-
-                            <option value={3}>
-                                LEVEL 3 - 중요
-                            </option>
-
-                            <option value={4}>
-                                LEVEL 4 - 기밀
-                            </option>
-
-                            <option value={5}>
-                                LEVEL 5 - 최고 기밀
-                            </option>
+                            <option value={1}>LEVEL 1 - 일반</option>
+                            <option value={2}>LEVEL 2 - 부서 업무</option>
+                            <option value={3}>LEVEL 3 - 중요</option>
+                            <option value={4}>LEVEL 4 - 기밀</option>
+                            <option value={5}>LEVEL 5 - 최고 기밀</option>
                         </select>
 
                         <p className="document-security-help">
                             로그인 사용자의 보안등급보다 높은 등급은
                             서버에서 차단됩니다.
                         </p>
-
                     </div>
 
                     {message && (
@@ -356,17 +285,10 @@ function DocumentUpload() {
                         onClick={uploadDocument}
                         disabled={uploading || !file}
                     >
-                        {
-                            uploading
-                                ? '업로드 중...'
-                                : '문서 업로드'
-                        }
+                        {uploading ? '업로드 중...' : '문서 업로드'}
                     </button>
-
                 </div>
-
             </div>
-
         </div>
     )
 }

@@ -1,51 +1,54 @@
-### 1. CSRF 토큰 조회
+### 1. 로그인 전 CSRF 토큰 조회
 GET http://localhost:8080/api/auth/csrf
 Accept: application/json
 
 > {%
     client.global.set("csrfToken", response.body.token);
-    client.global.set("csrfHeader", response.body.headerName);
 %}
 
 
 ### 2. 로그인
 POST http://localhost:8080/api/auth/login
 Content-Type: application/json
+Accept: application/json
 X-XSRF-TOKEN: {{csrfToken}}
 
 {
   "username": "testuser",
-  "password": "bootertest26!@"
+  "password": "로컬_비밀번호"
 }
 
 
-### 3. Vector Search
-GET http://localhost:8080/api/documents/search?query=관리자도%20보안등급%20제한을%20받나요
+### 3. 로그인 후 CSRF 토큰 다시 조회
+GET http://localhost:8080/api/auth/csrf
 Accept: application/json
 
+> {%
+    client.global.set("csrfToken", response.body.token);
+%}
 
-### Vector Search - 권한 필터 + 결과 재검증 테스트
-GET http://localhost:8080/api/documents/search?query=관리자도%20보안등급%20제한을%20받나요
+
+### Database RAG - AC 31건 / resultReference 발급
+POST http://localhost:8080/api/chat
+Content-Type: application/json
+Accept: application/json
+X-XSRF-TOKEN: {{csrfToken}}
+
+{
+  "question": "AC 시리즈 조회해줘"
+}
+
+> {%
+    client.global.set(
+        "resultReference",
+        response.body.resultReference
+    );
+%}
+
+### Database RAG - 전체 결과 조회
+GET http://localhost:8080/api/database/results/{{resultReference}}
 Accept: application/json
 
-
-### LEVEL 3 사용자의 LEVEL 4 문서 검색 차단 테스트
-GET http://localhost:8080/api/documents/search?query=관리자도%20보안등급%20제한을%20받나요
-Accept: application/json
-
-### Document RAG 테스트
-GET http://localhost:8080/api/documents/rag?question=관리자도%20보안등급%20제한을%20받나요
-Accept: application/json
-
-
-### 우리 부서 재직 직원 수 조회
-GET http://localhost:8080/api/documents/database/employee-count
-Accept: application/json
-
-### Database RAG - 우리 부서 직원 수
-GET http://localhost:8080/api/documents/database/rag/employee-count?question=우리%20부서%20직원은%20몇%20명인가요
-Accept: application/json
-
-### Database RAG
-GET http://localhost:8080/api/documents/database/rag/employee-count?question=우리%20부서%20직원은%20몇%20명인가요
-Accept: application/json
+### Database RAG - 전체 결과 CSV 다운로드
+GET http://localhost:8080/api/database/results/{{resultReference}}/download
+Accept: text/csv

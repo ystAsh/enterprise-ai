@@ -6,7 +6,7 @@
  *  - Database RAG의 공통 Query 실행 흐름을 관리한다.
  *  - 서버에 등록된 Query만 실행하고 실행 전/후 보안 검증을 강제한다.
  *  - 검증 완료된 실행 파라미터를 Executor에 전달한다.
- *  - 검증 완료 결과만 DatabaseQueryResult로 변환한다.
+ *  - 검증 완료 결과와 공통 결과 Metadata를 DatabaseQueryResult로 변환한다.
  *  - Query 실행 및 검증 상태를 내부 Audit Log에 기록한다.
  *  - 특정 회사, 업무, 테이블, Repository, Mapper에 종속되지 않는다.
  */
@@ -14,8 +14,10 @@
 package com.example.enterpriseai.service.database;
 
 import com.example.enterpriseai.dto.DatabaseQueryDefinition;
+import com.example.enterpriseai.dto.DatabaseQueryExecutionResult;
 import com.example.enterpriseai.dto.DatabaseQueryParameters;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
+import com.example.enterpriseai.dto.DatabaseQueryResultMetadata;
 import com.example.enterpriseai.security.CurrentUser;
 import com.example.enterpriseai.service.security.DatabaseQueryValidator;
 import com.example.enterpriseai.service.security.DatabaseResultValidator;
@@ -59,15 +61,6 @@ public class DatabaseQueryExecutionService {
     /*
      * 서버에 등록된 Query를 실행하고
      * 검증 완료 결과만 반환한다.
-     *
-     * queryKey:
-     *  - 실행할 서버 등록 Query 식별자
-     *
-     * parameters:
-     *  - 현재 질문에서 추출되고 검증된 실행 조건
-     *
-     * currentUser:
-     *  - Spring Security가 생성한 서버 권한 정보
      */
     public DatabaseQueryResult execute(
             String queryKey,
@@ -80,10 +73,6 @@ public class DatabaseQueryExecutionService {
                 currentUser
         );
 
-        /*
-         * 실제 실행 정보와 정책은
-         * 클라이언트나 LLM이 아니라 서버 Registry에서 가져온다.
-         */
         DatabaseQueryDefinition definition =
                 definitionRegistry.getRequired(
                         queryKey
@@ -92,7 +81,7 @@ public class DatabaseQueryExecutionService {
         long startedAt =
                 System.nanoTime();
 
-        Map<String, Object> rawResult;
+        DatabaseQueryExecutionResult executionResult;
 
         /*
          * =============================================================================
@@ -111,7 +100,7 @@ public class DatabaseQueryExecutionService {
                             definition
                     );
 
-            rawResult =
+            executionResult =
                     executor.execute(
                             definition,
                             parameters,
@@ -142,7 +131,7 @@ public class DatabaseQueryExecutionService {
 
             validatedResult =
                     resultValidator.validate(
-                            rawResult,
+                            executionResult.data(),
                             definition.validationPolicy()
                     );
 
@@ -150,7 +139,7 @@ public class DatabaseQueryExecutionService {
 
             safeAuditFailure(
                     definition,
-                    null,
+                    (long) executionResult.returnedCount(),
                     VALIDATION_FAILED,
                     startedAt,
                     e
@@ -161,7 +150,18 @@ public class DatabaseQueryExecutionService {
 
         /*
          * =============================================================================
-         * 3. 검증 완료 결과 생성
+         * 3. 검증 완료 결과 Metadata 생성
+         * =============================================================================
+         */
+        DatabaseQueryResultMetadata metadata =
+                new DatabaseQueryResultMetadata(
+                        executionResult.returnedCount(),
+                        executionResult.totalCount()
+                );
+
+        /*
+         * =============================================================================
+         * 4. 검증 완료 Evidence 생성
          * =============================================================================
          */
         DatabaseQueryResult.Evidence evidence =
@@ -173,16 +173,22 @@ public class DatabaseQueryExecutionService {
                         true
                 );
 
+        /*
+         * =============================================================================
+         * 5. 검증 완료 결과 생성
+         * =============================================================================
+         */
         DatabaseQueryResult queryResult =
                 new DatabaseQueryResult(
                         definition.queryType(),
                         validatedResult,
+                        metadata,
                         evidence
                 );
 
         /*
          * =============================================================================
-         * 4. 성공 Audit Log
+         * 6. 성공 Audit Log
          * =============================================================================
          */
         auditLogService.save(
@@ -190,7 +196,7 @@ public class DatabaseQueryExecutionService {
                 definition.queryKey(),
                 definition.executionType(),
                 null,
-                null,
+                (long) metadata.returnedCount(),
                 VALIDATION_PASSED,
                 true,
                 elapsedMs(startedAt)

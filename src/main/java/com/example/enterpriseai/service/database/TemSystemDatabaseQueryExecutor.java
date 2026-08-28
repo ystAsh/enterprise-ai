@@ -3,15 +3,16 @@
  * 클래스명 : TemSystemDatabaseQueryExecutor
  * =============================================================================
  * 목적
- *  - enterprise-ai의 공통 DatabaseQueryExecutor와 tem-system 내부 조회 API를 연결한다.
+ *  - enterprise-ai의 공통 DatabaseQueryExecutor와 tem-system 기존 조회 API를 연결한다.
  *  - 검증 완료된 Query 파라미터만 기존 시스템에 전달한다.
- *  - 기존 시스템의 조회 결과를 Raw Result 형태로 반환하며,
- *    LLM 전달 전 반드시 DatabaseResultValidator 검증을 거친다.
+ *  - 기존 시스템의 업무 필드 의미를 해석하거나 자연어 답변을 만들지 않는다.
+ *  - Raw Result와 실제 반환 건수를 공통 실행 결과 형태로 반환한다.
  */
 
 package com.example.enterpriseai.service.database;
 
 import com.example.enterpriseai.dto.DatabaseQueryDefinition;
+import com.example.enterpriseai.dto.DatabaseQueryExecutionResult;
 import com.example.enterpriseai.dto.DatabaseQueryParameters;
 import com.example.enterpriseai.security.CurrentUser;
 import org.springframework.stereotype.Service;
@@ -51,7 +52,7 @@ public class TemSystemDatabaseQueryExecutor
     }
 
     @Override
-    public Map<String, Object> execute(
+    public DatabaseQueryExecutionResult execute(
             DatabaseQueryDefinition definition,
             DatabaseQueryParameters parameters,
             CurrentUser currentUser
@@ -76,10 +77,14 @@ public class TemSystemDatabaseQueryExecutor
         }
 
         String keyword =
-                parameters.getRequiredString("keyword");
+                parameters.getRequiredString(
+                        "keyword"
+                );
 
-        List<TemSystemClient.SeriesSearchResponse> items =
-                temSystemClient.searchSeries(keyword);
+        List<Map<String, Object>> items =
+                temSystemClient.searchSeries(
+                        keyword
+                );
 
         Map<String, Object> result =
                 new LinkedHashMap<>();
@@ -94,6 +99,9 @@ public class TemSystemDatabaseQueryExecutor
                 items.size()
         );
 
-        return result;
+        return DatabaseQueryExecutionResult.returned(
+                result,
+                items.size()
+        );
     }
 }

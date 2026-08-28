@@ -5,7 +5,7 @@
  * 목적
  *  - 로그인한 사용자의 자연어 질문을 HTTP 요청으로 전달받는다.
  *  - Spring Security가 인증한 CurrentUser를 서버에서 직접 가져온다.
- *  - AiChatService를 호출하여 Gemini 답변을 생성한다.
+ *  - AiChatService의 처리 결과를 공통 ChatResponse 형태로 반환한다.
  */
 
 package com.example.enterpriseai.controller;
@@ -37,22 +37,19 @@ public class ChatApiController {
         this.aiChatService = aiChatService;
     }
 
-    // 로그인 사용자의 질문을 받고 Spring Security Principal을 함께 가져온다.
+    // 로그인 사용자의 질문과 서버가 인증한 CurrentUser를 AI 처리 계층에 전달한다.
     @PostMapping
     public ResponseEntity<ChatResponse> chat(
             @AuthenticationPrincipal CurrentUser currentUser,
             @Valid @RequestBody ChatRequest request
     ) {
 
-        // 현재는 Gemini 기본 호출만 수행하며 CurrentUser 연결 여부만 확인한다.
-        String answer =
-                aiChatService.generateAnswer(
+        ChatResponse response =
+                aiChatService.generateResponse(
                         request.question(),
                         currentUser
                 );
 
-        return ResponseEntity.ok(
-                new ChatResponse(answer)
-        );
+        return ResponseEntity.ok(response);
     }
 }

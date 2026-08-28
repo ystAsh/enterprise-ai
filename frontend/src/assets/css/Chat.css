@@ -169,31 +169,80 @@
 
 /* 메시지 본문 */
 .message-content {
+    width: 100%;
     max-width: 720px;
 
-    padding: 14px 16px;
+    padding: 16px 18px;
 
+    color: #334155;
     background: #f8fafc;
 
     border: 1px solid #e2e8f0;
     border-radius: 4px 14px 14px 14px;
-}
 
-/* 메시지 작성자 */
-.message-content strong {
-    color: #334155;
+    box-sizing: border-box;
+    text-align: left;
 
     font-size: 13px;
 }
 
-/* 메시지 내용 */
-.message-content p {
-    margin: 8px 0 0;
+/* 메시지 작성자 */
+.message-content > strong {
+    display: block;
 
+    margin-bottom: 10px;
+
+    color: #334155;
+
+    font-size: 13px;
+    font-weight: 700;
+}
+
+/* Markdown 전체 영역 */
+.message-markdown {
     color: #475569;
 
     font-size: 14px;
     line-height: 1.7;
+
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+/* Markdown 문단 */
+.message-markdown p {
+    margin: 0 0 10px;
+
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/* 마지막 문단 여백 제거 */
+.message-markdown p:last-child {
+    margin-bottom: 0;
+}
+
+/* Markdown 목록 */
+.message-markdown ul,
+.message-markdown ol {
+    margin: 8px 0 0;
+    padding-left: 22px;
+}
+
+/* Markdown 목록 항목 */
+.message-markdown li {
+    margin: 4px 0;
+
+    font-size: inherit;
+    line-height: 1.6;
+}
+
+/* Markdown 내부 강조 */
+.message-markdown strong {
+    color: #334155;
+
+    font-size: inherit;
+    font-weight: 600;
 }
 
 /* 질문 입력 전체 영역 */
@@ -359,4 +408,79 @@
         outline: 3px solid rgba(37, 99, 235, 0.20);
         outline-offset: 2px;
     }
+}
+/* =============================================================================
+ * Database RAG 구조화 결과 테이블
+ * =============================================================================
+ */
+
+/* 결과 테이블 영역 */
+.result-table-wrapper {
+    width: 100%;
+
+    margin-top: 16px;
+
+    overflow-x: auto;
+
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+
+    background: #ffffff;
+}
+
+/* 결과 테이블 */
+.result-table {
+    width: 100%;
+    min-width: 520px;
+
+    border-collapse: collapse;
+
+    color: #475569;
+
+    font-size: 13px;
+    line-height: 1.5;
+
+    text-align: left;
+}
+
+/* 테이블 헤더 */
+.result-table th {
+    padding: 10px 12px;
+
+    color: #334155;
+    background: #f1f5f9;
+
+    border-bottom: 1px solid #cbd5e1;
+
+    font-size: 13px;
+    font-weight: 600;
+
+    white-space: nowrap;
+}
+
+/* 테이블 데이터 */
+.result-table td {
+    padding: 10px 12px;
+
+    border-bottom: 1px solid #e2e8f0;
+
+    font-size: 13px;
+    vertical-align: top;
+
+    overflow-wrap: anywhere;
+}
+
+/* 마지막 행의 하단 선 제거 */
+.result-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* 행 구분을 쉽게 한다. */
+.result-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+/* 마우스가 올라간 행을 표시한다. */
+.result-table tbody tr:hover {
+    background: #eff6ff;
 }
