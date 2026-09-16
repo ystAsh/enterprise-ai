@@ -13,12 +13,14 @@ package com.example.enterpriseai.config;
 import com.example.enterpriseai.dto.DatabaseQueryCapability;
 import com.example.enterpriseai.dto.DatabaseQueryDefinition;
 import com.example.enterpriseai.dto.DatabaseQueryExecutionPolicy;
+import com.example.enterpriseai.dto.DatabaseQueryParameterPolicy;
 import com.example.enterpriseai.dto.DatabaseValidationPolicy;
 import com.example.enterpriseai.service.database.DatabaseQueryCapabilityRegistry;
 import com.example.enterpriseai.service.database.TemSystemDatabaseQueryExecutor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.util.Map;
 import java.util.Set;
 
 @Configuration
@@ -39,7 +41,6 @@ public class TemSystemCapabilityConfig {
                         "TEM_SYSTEM_SEARCH_CAPABILITY",
                         "등록된 업무 데이터를 조건에 따라 조회한다.",
                         Set.of(
-                                "SEARCH",
                                 "LOOKUP"
                         )
                 );
@@ -81,13 +82,23 @@ public class TemSystemCapabilityConfig {
                         true
                 );
 
+        Map<String, DatabaseQueryParameterPolicy> parameterPolicies =
+                Map.of(
+                        "keyword",
+                        new DatabaseQueryParameterPolicy(
+                                DatabaseQueryParameterPolicy.ParameterType.STRING,
+                                true,
+                                100
+                        )
+                );
+
         return new DatabaseQueryDefinition(
                 "LOOKUP",
                 QUERY_KEY,
                 "등록된 업무 데이터 조회",
                 "tem-system",
                 EXECUTION_TYPE,
-                Set.of("keyword"),
+                parameterPolicies,
                 executionPolicy,
                 validationPolicy
         );
