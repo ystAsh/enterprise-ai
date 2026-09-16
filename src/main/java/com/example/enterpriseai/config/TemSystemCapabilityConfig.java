@@ -29,8 +29,7 @@ public class TemSystemCapabilityConfig {
     private static final String QUERY_KEY =
             TemSystemDatabaseQueryExecutor.QUERY_SERIES_SEARCH;
 
-    private static final String EXECUTION_TYPE =
-            "HTTP_ADAPTER";
+    private static final String EXECUTION_TYPE = "HTTP_ADAPTER";
 
     @Bean
     public DatabaseQueryCapabilityRegistry.RegisteredCapability
@@ -40,9 +39,7 @@ public class TemSystemCapabilityConfig {
                 new DatabaseQueryCapability(
                         "TEM_SYSTEM_SEARCH_CAPABILITY",
                         "등록된 업무 데이터를 조건에 따라 조회한다.",
-                        Set.of(
-                                "LOOKUP"
-                        )
+                        Set.of("LOOKUP")
                 );
 
         return new DatabaseQueryCapabilityRegistry.RegisteredCapability(
@@ -52,8 +49,7 @@ public class TemSystemCapabilityConfig {
     }
 
     @Bean
-    public DatabaseQueryDefinition
-    temSystemSearchDefinition() {
+    public DatabaseQueryDefinition temSystemSearchDefinition() {
 
         DatabaseQueryExecutionPolicy executionPolicy =
                 new DatabaseQueryExecutionPolicy(
@@ -86,6 +82,7 @@ public class TemSystemCapabilityConfig {
                 Map.of(
                         "keyword",
                         new DatabaseQueryParameterPolicy(
+                                "사용자 질문에서 기존 시스템 조회에 사용할 검색 조건",
                                 DatabaseQueryParameterPolicy.ParameterType.STRING,
                                 true,
                                 100

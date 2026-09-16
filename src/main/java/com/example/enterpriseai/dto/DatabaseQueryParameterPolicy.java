@@ -4,13 +4,16 @@
  * =============================================================================
  * 목적
  *  - Database Query 파라미터의 공통 검증 규칙을 표현한다.
- *  - 파라미터 이름별 허용 타입, 필수 여부, 문자열 최대 길이를 서버에서 관리한다.
+ *  - 파라미터별 안전한 설명, 허용 타입, 필수 여부, 문자열 최대 길이를 관리한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
 package com.example.enterpriseai.dto;
 
 public record DatabaseQueryParameterPolicy(
+
+        // LLM이 파라미터 후보를 추출할 때 사용할 안전한 설명
+        String description,
 
         // 허용할 파라미터 값 타입
         ParameterType type,
@@ -24,6 +27,12 @@ public record DatabaseQueryParameterPolicy(
 ) {
 
     public DatabaseQueryParameterPolicy {
+
+        if (description == null || description.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Query 파라미터 설명이 없습니다."
+            );
+        }
 
         if (type == null) {
             throw new IllegalArgumentException(
