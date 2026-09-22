@@ -15,7 +15,7 @@ X-XSRF-TOKEN: {{csrfToken}}
 
 {
   "username": "testuser",
-  "password": "로컬_비밀번호"
+  "password": "bootertest26!@"
 }
 
 

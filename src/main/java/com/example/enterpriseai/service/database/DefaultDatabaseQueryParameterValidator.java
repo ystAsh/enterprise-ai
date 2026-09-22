@@ -47,7 +47,7 @@ public class DefaultDatabaseQueryParameterValidator
 
         Map<String, Object> validatedValues = new HashMap<>();
 
-        // 후보에 포함된 모든 파라미터가 서버 정책에 등록되어 있는지 검증한다.
+        // 후보에 포함된 모든 파라미터를 서버 정책 기준으로 검증한다.
         for (Map.Entry<String, Object> entry : candidate.values().entrySet()) {
             String key = entry.getKey();
             Object value = entry.getValue();
@@ -61,7 +61,7 @@ public class DefaultDatabaseQueryParameterValidator
             );
         }
 
-        // 서버에서 필수로 정의한 파라미터가 모두 존재하는지 검증한다.
+        // required=true인 파라미터가 모두 존재하는지 검증한다.
         validateRequiredParameters(
                 parameterPolicies,
                 validatedValues
@@ -137,7 +137,7 @@ public class DefaultDatabaseQueryParameterValidator
         return normalized;
     }
 
-    // 정수형 파라미터는 실행 계층에서 공통으로 사용할 Long으로 정규화한다.
+    // LONG 정책은 정수 객체 또는 숫자 문자열을 Long으로 정규화한다.
     private Long validateLong(Object value) {
         if (value instanceof Long longValue) {
             return longValue;
@@ -145,6 +145,25 @@ public class DefaultDatabaseQueryParameterValidator
 
         if (value instanceof Integer intValue) {
             return intValue.longValue();
+        }
+
+        if (value instanceof String stringValue) {
+            String normalized = stringValue.trim();
+
+            if (normalized.isBlank()) {
+                throw new IllegalArgumentException(
+                        "Query 파라미터 값이 없습니다."
+                );
+            }
+
+            try {
+                return Long.valueOf(normalized);
+            } catch (NumberFormatException e) {
+                throw new IllegalArgumentException(
+                        "Query 파라미터 타입이 올바르지 않습니다.",
+                        e
+                );
+            }
         }
 
         throw new IllegalArgumentException(
