@@ -35,7 +35,7 @@ public class DatabaseQueryCapabilityResolver {
         this.chatClient = chatClientBuilder.build();
     }
 
-    // 질문에 적합한 Capability를 선택하고 서버 내부 queryKey로 변환한다.
+    // 사용자 질문에 적합한 Capability를 선택하고 서버 내부 queryKey로 변환한다.
     public String resolveQueryKey(String question) {
         validateQuestion(question);
 
@@ -55,8 +55,7 @@ public class DatabaseQueryCapabilityResolver {
             );
         }
 
-        String capabilityContext =
-                buildCapabilityContext(capabilities);
+        String capabilityContext = buildCapabilityContext(capabilities);
 
         String selectedCapabilityKey = chatClient.prompt()
                 .system("""
@@ -96,7 +95,7 @@ public class DatabaseQueryCapabilityResolver {
             );
         }
 
-        // LLM 결과를 다시 Registry에서 확인하고 등록된 Capability만 허용한다.
+        // LLM 결과는 Registry에서 다시 확인하고 등록된 Capability만 허용한다.
         return capabilityRegistry.getRequiredQueryKey(
                 normalizedCapabilityKey
         );
@@ -122,7 +121,7 @@ public class DatabaseQueryCapabilityResolver {
                 .collect(Collectors.joining("\n"));
     }
 
-    // 실제 등록 여부는 Registry에서 최종 검증한다.
+    // 실제 등록 여부는 Registry가 최종 판단한다.
     private String normalizeResult(String result) {
         if (result == null || result.isBlank()) {
             throw new IllegalStateException(
