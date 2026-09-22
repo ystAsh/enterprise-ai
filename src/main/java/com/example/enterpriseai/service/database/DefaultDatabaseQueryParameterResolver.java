@@ -16,30 +16,21 @@ import com.example.enterpriseai.dto.DatabaseQueryDefinition;
 import com.example.enterpriseai.dto.DatabaseQueryParameterCandidate;
 import com.example.enterpriseai.dto.DatabaseQueryParameterPolicy;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.json.JsonMapper;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @Service
 public class DefaultDatabaseQueryParameterResolver
         implements DatabaseQueryParameterResolver {
 
-    private static final String JSON_FENCE_START = "```json";
-    private static final String FENCE_START = "```";
-    private static final String FENCE_END = "```";
-
     private final ChatClient chatClient;
-    private final JsonMapper jsonMapper;
 
     public DefaultDatabaseQueryParameterResolver(
-            ChatClient.Builder chatClientBuilder,
-            JsonMapper jsonMapper
+            ChatClient.Builder chatClientBuilder
     ) {
         this.chatClient = chatClientBuilder.build();
-        this.jsonMapper = jsonMapper;
     }
 
     @Override
@@ -69,12 +60,12 @@ public class DefaultDatabaseQueryParameterResolver
         String parameterContext =
                 buildParameterContext(definition.parameterPolicies());
 
-        String result = chatClient.prompt()
+        Map<String, Object> values = chatClient.prompt()
                 .system("""
                         사용자의 질문에서 Database 조회에 필요한
                         파라미터 후보값만 추출하세요.
 
-                        제공된 파라미터 목록에 있는 key만 사용할 수 있습니다.
+                        제공된 파라미터 목록의 key만 사용하세요.
 
                         특정 회사의 업무 용어, 코드 체계, 식별자 형식,
                         접두사, 숫자 규칙을 임의로 가정하지 마세요.
@@ -85,12 +76,9 @@ public class DefaultDatabaseQueryParameterResolver
                         SQL, 테이블, 컬럼, Schema, Query 실행정보를
                         추측하거나 생성하지 마세요.
 
-                        선택 파라미터의 값을 확인할 수 없으면 생략하세요.
+                        값을 확인할 수 없는 선택 파라미터는 생략하세요.
                         필수 파라미터도 값을 확인할 수 없으면
                         임의 값을 생성하지 마세요.
-
-                        설명 문장이나 Markdown을 추가하지 마세요.
-                        반드시 JSON 객체 하나만 반환하세요.
                         """)
                 .user("""
                         [사용자 질문]
@@ -103,10 +91,16 @@ public class DefaultDatabaseQueryParameterResolver
                         parameterContext
                 ))
                 .call()
-                .content();
+                .entity(
+                        new ParameterizedTypeReference<
+                                Map<String, Object>
+                                >() {
+                        },
+                        spec -> spec.useProviderStructuredOutput()
+                );
 
         return new DatabaseQueryParameterCandidate(
-                parseCandidate(result)
+                values == null ? Map.of() : values
         );
     }
 
@@ -135,61 +129,5 @@ public class DefaultDatabaseQueryParameterResolver
         });
 
         return context.toString();
-    }
-
-    // LLM 응답은 JSON 객체 또는 전체 Markdown JSON Fence 형식만 허용한다.
-    private Map<String, Object> parseCandidate(String result) {
-        if (result == null || result.isBlank()) {
-            throw new IllegalStateException(
-                    "Query 파라미터 분석 결과가 없습니다."
-            );
-        }
-
-        String normalized = normalizeJsonResponse(result);
-
-        try {
-            Map<String, Object> values = jsonMapper.readValue(
-                    normalized,
-                    new TypeReference<LinkedHashMap<String, Object>>() {
-                    }
-            );
-
-            return values == null ? Map.of() : values;
-
-        } catch (Exception e) {
-            throw new IllegalStateException(
-                    "Query 파라미터 분석 결과 형식이 올바르지 않습니다.",
-                    e
-            );
-        }
-    }
-
-    // 응답 전체가 하나의 JSON Fence일 때만 Fence를 제거한다.
-    private String normalizeJsonResponse(String result) {
-        String normalized = result.trim();
-
-        if (normalized.startsWith(JSON_FENCE_START)
-                && normalized.endsWith(FENCE_END)) {
-
-            return normalized
-                    .substring(
-                            JSON_FENCE_START.length(),
-                            normalized.length() - FENCE_END.length()
-                    )
-                    .trim();
-        }
-
-        if (normalized.startsWith(FENCE_START)
-                && normalized.endsWith(FENCE_END)) {
-
-            return normalized
-                    .substring(
-                            FENCE_START.length(),
-                            normalized.length() - FENCE_END.length()
-                    )
-                    .trim();
-        }
-
-        return normalized;
     }
 }

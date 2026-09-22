@@ -82,7 +82,7 @@ public class TemSystemCapabilityConfig {
                 Map.of(
                         "keyword",
                         new DatabaseQueryParameterPolicy(
-                                "사용자 질문에서 기존 시스템 조회에 사용할 검색 조건",
+                                "사용자 질문에서 조회 대상으로 언급한 검색값",
                                 DatabaseQueryParameterPolicy.ParameterType.STRING,
                                 true,
                                 100
