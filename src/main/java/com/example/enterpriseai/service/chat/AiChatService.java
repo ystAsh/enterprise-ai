@@ -4,7 +4,7 @@
  * =============================================================================
  * 목적
  *  - 로그인 사용자의 자연어 질문을 적절한 RAG 처리 경로로 전달한다.
- *  - DOCUMENT / DATABASE 처리 결과를 공통 ChatResponse 형태로 구성한다.
+ *  - DOCUMENT / DATABASE / HYBRID 처리 결과를 공통 ChatResponse 형태로 구성한다.
  *  - 소량 Database 결과만 Gemini와 채팅 화면에 직접 전달한다.
  *  - 대량 Database 결과는 전체 데이터를 Gemini와 채팅 응답에 전달하지 않는다.
  *  - 대량 Database 결과는 서버에 보관하고 opaque resultReference만 외부에 전달한다.
@@ -22,6 +22,7 @@ import com.example.enterpriseai.service.database.DatabaseRagService;
 import com.example.enterpriseai.service.database.DatabaseResultPresentationPolicy;
 import com.example.enterpriseai.service.database.DatabaseResultReferenceStore;
 import com.example.enterpriseai.service.document.DocumentRagService;
+import com.example.enterpriseai.service.hybrid.HybridRagService;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -33,6 +34,7 @@ public class AiChatService {
     private final DatabaseRagService databaseRagService;
     private final DatabaseResultPresentationPolicy presentationPolicy;
     private final DatabaseResultReferenceStore resultReferenceStore;
+    private final HybridRagService hybridRagService;
 
     public AiChatService(
             QuestionRouterService questionRouterService,
@@ -40,55 +42,35 @@ public class AiChatService {
             DatabaseQueryRequestService databaseQueryRequestService,
             DatabaseRagService databaseRagService,
             DatabaseResultPresentationPolicy presentationPolicy,
-            DatabaseResultReferenceStore resultReferenceStore
+            DatabaseResultReferenceStore resultReferenceStore,
+            HybridRagService hybridRagService
     ) {
-        this.questionRouterService =
-                questionRouterService;
-
-        this.documentRagService =
-                documentRagService;
-
-        this.databaseQueryRequestService =
-                databaseQueryRequestService;
-
-        this.databaseRagService =
-                databaseRagService;
-
-        this.presentationPolicy =
-                presentationPolicy;
-
-        this.resultReferenceStore =
-                resultReferenceStore;
+        this.questionRouterService = questionRouterService;
+        this.documentRagService = documentRagService;
+        this.databaseQueryRequestService = databaseQueryRequestService;
+        this.databaseRagService = databaseRagService;
+        this.presentationPolicy = presentationPolicy;
+        this.resultReferenceStore = resultReferenceStore;
+        this.hybridRagService = hybridRagService;
     }
 
     public String generateAnswer(
             String question,
             CurrentUser currentUser
     ) {
-
-        return generateResponse(
-                question,
-                currentUser
-        ).answer();
+        return generateResponse(question, currentUser).answer();
     }
 
     public ChatResponse generateResponse(
             String question,
             CurrentUser currentUser
     ) {
-
-        validateInput(
-                question,
-                currentUser
-        );
+        validateInput(question, currentUser);
 
         QuestionRouterService.QuestionType questionType =
-                questionRouterService.route(
-                        question
-                );
+                questionRouterService.route(question);
 
         return switch (questionType) {
-
             case DOCUMENT ->
                     new ChatResponse(
                             documentRagService.answer(
@@ -104,21 +86,20 @@ public class AiChatService {
                     );
 
             case HYBRID ->
-                    throw new UnsupportedOperationException(
-                            "HYBRID RAG는 현재 지원하지 않습니다."
+                    new ChatResponse(
+                            hybridRagService.answer(
+                                    question,
+                                    currentUser
+                            )
                     );
         };
     }
 
-    /*
-     * 검증 완료 Database 결과의 크기에 따라
-     * INLINE / EXTERNAL 처리 경로를 분리한다.
-     */
+    // 검증 완료 Database 결과 크기에 따라 INLINE / EXTERNAL 경로를 분리한다.
     private ChatResponse answerDatabase(
             String question,
             CurrentUser currentUser
     ) {
-
         DatabaseQueryResult queryResult =
                 databaseQueryRequestService.execute(
                         question,
@@ -131,7 +112,6 @@ public class AiChatService {
                 );
 
         return switch (presentationType) {
-
             case INLINE ->
                     answerInlineDatabase(
                             question,
@@ -146,15 +126,11 @@ public class AiChatService {
         };
     }
 
-    /*
-     * 소량 결과:
-     * 검증 완료 데이터만 Gemini와 React에 전달한다.
-     */
+    // 소량 결과는 검증 완료 데이터만 Gemini와 React에 전달한다.
     private ChatResponse answerInlineDatabase(
             String question,
             DatabaseQueryResult queryResult
     ) {
-
         String answer =
                 databaseRagService.answer(
                         question,
@@ -172,21 +148,11 @@ public class AiChatService {
         );
     }
 
-    /*
-     * 대량 결과:
-     * 전체 업무 데이터는 Gemini와 ChatResponse.data에 전달하지 않는다.
-     *
-     * 검증 완료 결과는 서버 저장소에 보관하고
-     * 외부에는 opaque resultReference만 전달한다.
-     *
-     * 전체 조회 및 CSV 다운로드는 resultReference를 이용하며,
-     * 실제 접근 시 Spring Security 사용자 소유권을 다시 검증한다.
-     */
+    // 대량 결과는 서버에 보관하고 외부에는 opaque resultReference만 전달한다.
     private ChatResponse answerExternalDatabase(
             DatabaseQueryResult queryResult,
             CurrentUser currentUser
     ) {
-
         int returnedCount =
                 queryResult.metadata().returnedCount();
 
@@ -216,7 +182,6 @@ public class AiChatService {
             String question,
             CurrentUser currentUser
     ) {
-
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException(
                     "질문이 없습니다."

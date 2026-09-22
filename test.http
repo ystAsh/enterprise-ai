@@ -52,3 +52,31 @@ Accept: application/json
 ### Database RAG - 전체 결과 CSV 다운로드
 GET http://localhost:8080/api/database/results/{{resultReference}}/download
 Accept: text/csv
+
+
+### Database RAG Phase 10 E2E - 1회
+POST http://localhost:8080/api/chat
+Content-Type: application/json
+Accept: application/json
+X-XSRF-TOKEN: {{csrfToken}}
+
+{
+  "question": "AC 시리즈 조회해줘"
+}
+
+> {%
+    client.global.set(
+        "resultReference",
+        response.body.resultReference
+    );
+%}
+
+
+### 전체 결과 조회
+GET http://localhost:8080/api/database/results/{{resultReference}}
+Accept: application/json
+
+
+### CSV 다운로드
+GET http://localhost:8080/api/database/results/{{resultReference}}/download
+Accept: text/csv
