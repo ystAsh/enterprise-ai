@@ -61,7 +61,7 @@ Accept: application/json
 X-XSRF-TOKEN: {{csrfToken}}
 
 {
-  "question": "AC 시리즈 조회해줘"
+  "question": "AC 시리즈 목록을 조회하고, 관리자도 보안등급 제한을 받는지 관련 문서를 근거로 같이 설명해줘."
 }
 
 > {%
