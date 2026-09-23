@@ -86,11 +86,9 @@ public class AiChatService {
                     );
 
             case HYBRID ->
-                    new ChatResponse(
-                            hybridRagService.answer(
-                                    question,
-                                    currentUser
-                            )
+                    hybridRagService.generateResponse(
+                            question,
+                            currentUser
                     );
         };
     }
