@@ -80,3 +80,21 @@ Accept: application/json
 ### CSV 다운로드
 GET http://localhost:8080/api/database/results/{{resultReference}}/download
 Accept: text/csv
+
+
+### Phase 11 Hybrid RAG E2E
+POST http://localhost:8080/api/chat
+Content-Type: application/json
+Accept: application/json
+X-XSRF-TOKEN: {{csrfToken}}
+
+{
+  "question": "AC 시리즈 목록을 조회하고, 관리자도 보안등급 제한을 받는지 관련 문서를 근거로 같이 설명해줘."
+}
+
+> {%
+    client.global.set(
+        "resultReference",
+        response.body.resultReference
+    );
+%}
