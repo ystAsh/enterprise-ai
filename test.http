@@ -93,3 +93,13 @@ X-XSRF-TOKEN: {{csrfToken}}
 {
   "question": "내 사용자명과 보안등급을 조회해줘."
 }
+
+### Phase 13 Audit E2E
+POST http://localhost:8080/api/chat
+Content-Type: application/json
+Accept: application/json
+X-XSRF-TOKEN: {{csrfToken}}
+
+{
+  "question": "AC 시리즈 조회해줘"
+}

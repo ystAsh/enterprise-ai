@@ -7,7 +7,7 @@
  *  - 서버에 등록된 Query만 실행하고 실행 전/후 보안 검증을 강제한다.
  *  - 검증 완료된 실행 파라미터를 Executor에 전달한다.
  *  - 검증 완료 결과와 공통 결과 Metadata를 DatabaseQueryResult로 변환한다.
- *  - Query 실행 및 검증 상태를 내부 Audit Log에 기록한다.
+ *  - 사용자 질문과 Query 실행/검증 상태를 일반 Audit Log에 기록한다.
  *  - 특정 회사, 업무, 테이블, Repository, Mapper에 종속되지 않는다.
  */
 
@@ -55,11 +55,16 @@ public class DatabaseQueryExecutionService {
 
     // 서버에 등록된 Query를 실행하고 검증 완료 결과만 반환한다.
     public DatabaseQueryResult execute(
+            String question,
             String queryKey,
             DatabaseQueryParameters parameters,
             CurrentUser currentUser
     ) {
-        validateInput(parameters, currentUser);
+        validateInput(
+                question,
+                parameters,
+                currentUser
+        );
 
         DatabaseQueryDefinition definition =
                 definitionRegistry.getRequired(queryKey);
@@ -75,6 +80,7 @@ public class DatabaseQueryExecutionService {
 
         } catch (RuntimeException e) {
             safeAuditFailure(
+                    question,
                     definition,
                     null,
                     VALIDATION_FAILED,
@@ -100,6 +106,7 @@ public class DatabaseQueryExecutionService {
 
         } catch (RuntimeException e) {
             safeAuditFailure(
+                    question,
                     definition,
                     null,
                     VALIDATION_SKIPPED,
@@ -121,6 +128,7 @@ public class DatabaseQueryExecutionService {
 
         } catch (RuntimeException e) {
             safeAuditFailure(
+                    question,
                     definition,
                     (long) executionResult.returnedCount(),
                     VALIDATION_FAILED,
@@ -159,10 +167,11 @@ public class DatabaseQueryExecutionService {
 
         // 7. 성공 Audit Log
         auditLogService.save(
+                question,
                 definition.queryType(),
                 definition.queryKey(),
+                definition.source(),
                 definition.executionType(),
-                null,
                 (long) metadata.returnedCount(),
                 VALIDATION_PASSED,
                 true,
@@ -172,11 +181,17 @@ public class DatabaseQueryExecutionService {
         return queryResult;
     }
 
-    // Query 실행 전에 반드시 필요한 입력을 확인한다.
     private void validateInput(
+            String question,
             DatabaseQueryParameters parameters,
             CurrentUser currentUser
     ) {
+        if (question == null || question.isBlank()) {
+            throw new IllegalArgumentException(
+                    "사용자 질문이 없습니다."
+            );
+        }
+
         if (parameters == null) {
             throw new IllegalArgumentException(
                     "Query 실행 파라미터가 없습니다."
@@ -192,6 +207,7 @@ public class DatabaseQueryExecutionService {
 
     // Audit 저장 실패가 원래 Query 예외를 덮어쓰지 않도록 suppressed exception으로 추가한다.
     private void safeAuditFailure(
+            String question,
             DatabaseQueryDefinition definition,
             Long resultCount,
             String validationStatus,
@@ -200,10 +216,11 @@ public class DatabaseQueryExecutionService {
     ) {
         try {
             auditLogService.save(
+                    question,
                     definition.queryType(),
                     definition.queryKey(),
+                    definition.source(),
                     definition.executionType(),
-                    null,
                     resultCount,
                     validationStatus,
                     false,

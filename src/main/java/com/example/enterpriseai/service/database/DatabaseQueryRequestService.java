@@ -105,6 +105,7 @@ public class DatabaseQueryRequestService {
                 );
 
         return executionService.execute(
+                question,
                 queryKey,
                 parameters,
                 currentUser

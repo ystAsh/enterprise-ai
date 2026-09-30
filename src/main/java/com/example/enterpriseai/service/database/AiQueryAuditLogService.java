@@ -3,9 +3,10 @@
  * 클래스명 : AiQueryAuditLogService
  * =============================================================================
  * 목적
- *  - Database RAG에서 실행된 Query의 내부 감사 로그를 MSSQL에 저장한다.
+ *  - Database RAG에서 실행된 Query의 일반 감사 로그를 MSSQL에 저장한다.
  *  - 실제 데이터 조회 Transaction과 감사 로그 저장 Transaction을 분리한다.
- *  - Query 실행 결과와 Java 검증 상태를 공통 감사 정보로 기록한다.
+ *  - 사용자 질문, Query 실행 정보, 결과 건수와 Java 검증 상태를 기록한다.
+ *  - 실제 SQL, Binding Parameter, 개인정보, 전체 결과는 일반 Audit에 저장하지 않는다.
  *  - 특정 업무, 테이블, Query 구현에 종속되지 않는다.
  */
 
@@ -38,7 +39,7 @@ public class AiQueryAuditLogService {
     }
 
     /*
-     * Query 실행 결과를 서버 내부 감사 로그로 저장한다.
+     * Query 실행 결과를 서버 내부 일반 감사 로그로 저장한다.
      *
      * REQUIRES_NEW:
      * 실제 데이터 조회 Transaction과 분리하여
@@ -48,19 +49,21 @@ public class AiQueryAuditLogService {
             propagation = Propagation.REQUIRES_NEW
     )
     public void save(
+            String question,
             String queryType,
             String queryKey,
+            String source,
             String executionType,
-            String parameterizedSql,
             Long resultCount,
             String validationStatus,
             boolean success,
             long elapsedMs
     ) {
-
         validate(
+                question,
                 queryType,
                 queryKey,
+                source,
                 executionType,
                 resultCount,
                 validationStatus,
@@ -69,10 +72,11 @@ public class AiQueryAuditLogService {
 
         AiQueryAuditLog auditLog =
                 AiQueryAuditLog.create(
+                        question,
                         queryType,
                         queryKey,
+                        source,
                         executionType,
-                        parameterizedSql,
                         resultCount,
                         validationStatus,
                         success,
@@ -82,19 +86,22 @@ public class AiQueryAuditLogService {
         auditLogRepository.save(auditLog);
     }
 
-    /*
-     * 감사 로그 저장 전에 최소 공통 조건을 검증한다.
-     *
-     * 특정 데이터의 업무 의미는 검증하지 않는다.
-     */
+    // 일반 Audit 저장 전에 최소 공통 조건을 검증한다.
     private void validate(
+            String question,
             String queryType,
             String queryKey,
+            String source,
             String executionType,
             Long resultCount,
             String validationStatus,
             long elapsedMs
     ) {
+        if (question == null || question.isBlank()) {
+            throw new IllegalArgumentException(
+                    "사용자 질문이 없습니다."
+            );
+        }
 
         if (queryType == null || queryType.isBlank()) {
             throw new IllegalArgumentException(
@@ -108,6 +115,12 @@ public class AiQueryAuditLogService {
             );
         }
 
+        if (source == null || source.isBlank()) {
+            throw new IllegalArgumentException(
+                    "Query 데이터 출처가 없습니다."
+            );
+        }
+
         if (executionType == null || executionType.isBlank()) {
             throw new IllegalArgumentException(
                     "Query 실행 방식이 없습니다."
@@ -118,7 +131,6 @@ public class AiQueryAuditLogService {
                 || !ALLOWED_VALIDATION_STATUSES.contains(
                 validationStatus
         )) {
-
             throw new IllegalArgumentException(
                     "허용되지 않은 결과 검증 상태입니다."
             );

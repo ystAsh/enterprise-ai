@@ -3,8 +3,10 @@
  * 클래스명 : AiQueryAuditLog
  * =============================================================================
  * 목적
- *  - Database RAG에서 실행된 Query의 내부 감사 로그를 MSSQL에 저장한다.
- *  - 사용자 evidence와 분리하여 Query 실행 및 검증 이력을 서버 내부에서 추적한다.
+ *  - Database RAG에서 실행된 Query의 일반 감사 로그를 MSSQL에 저장한다.
+ *  - 사용자 질문, Query 식별정보, 실행 결과와 검증 상태를 구조화하여 기록한다.
+ *  - 실제 SQL, Binding Parameter, 개인정보, 전체 결과는 일반 Audit에 저장하지 않는다.
+ *  - Secure Verification Evidence와 일반 Audit의 책임을 분리한다.
  *  - 특정 업무, 테이블, Query 구현에 종속되지 않는다.
  */
 
@@ -24,6 +26,13 @@ public class AiQueryAuditLog {
     private Long auditLogId;
 
     @Column(
+            name = "question",
+            nullable = false,
+            length = 1000
+    )
+    private String question;
+
+    @Column(
             name = "query_type",
             nullable = false,
             length = 100
@@ -38,21 +47,18 @@ public class AiQueryAuditLog {
     private String queryKey;
 
     @Column(
+            name = "source",
+            nullable = false,
+            length = 100
+    )
+    private String source;
+
+    @Column(
             name = "execution_type",
             nullable = false,
             length = 50
     )
     private String executionType;
-
-    /*
-     * JdbcClient / Query Builder에서 직접 생성한
-     * parameterized SQL만 필요한 경우 저장한다.
-     *
-     * 실제 값이 치환된 SQL은 저장하지 않는다.
-     * JPA Repository Query에서는 null로 둔다.
-     */
-    @Column(name = "parameterized_sql")
-    private String parameterizedSql;
 
     @Column(name = "result_count")
     private Long resultCount;
@@ -62,7 +68,7 @@ public class AiQueryAuditLog {
      *
      * PASSED  : 결과 검증 통과
      * FAILED  : 결과 검증 실패
-     * SKIPPED : 검증 이전 종료 또는 기존 감사 로그
+     * SKIPPED : 검증 이전 종료
      */
     @Column(
             name = "validation_status",
@@ -92,27 +98,25 @@ public class AiQueryAuditLog {
     protected AiQueryAuditLog() {
     }
 
-    /*
-     * Query 실행 완료 후 감사 로그 객체를 생성한다.
-     */
+    // Query 실행 완료 후 일반 감사 로그 객체를 생성한다.
     public static AiQueryAuditLog create(
+            String question,
             String queryType,
             String queryKey,
+            String source,
             String executionType,
-            String parameterizedSql,
             Long resultCount,
             String validationStatus,
             boolean success,
             long elapsedMs
     ) {
+        AiQueryAuditLog log = new AiQueryAuditLog();
 
-        AiQueryAuditLog log =
-                new AiQueryAuditLog();
-
+        log.question = question;
         log.queryType = queryType;
         log.queryKey = queryKey;
+        log.source = source;
         log.executionType = executionType;
-        log.parameterizedSql = parameterizedSql;
         log.resultCount = resultCount;
         log.validationStatus = validationStatus;
         log.success = success;
@@ -126,6 +130,10 @@ public class AiQueryAuditLog {
         return auditLogId;
     }
 
+    public String getQuestion() {
+        return question;
+    }
+
     public String getQueryType() {
         return queryType;
     }
@@ -134,12 +142,12 @@ public class AiQueryAuditLog {
         return queryKey;
     }
 
-    public String getExecutionType() {
-        return executionType;
+    public String getSource() {
+        return source;
     }
 
-    public String getParameterizedSql() {
-        return parameterizedSql;
+    public String getExecutionType() {
+        return executionType;
     }
 
     public Long getResultCount() {
