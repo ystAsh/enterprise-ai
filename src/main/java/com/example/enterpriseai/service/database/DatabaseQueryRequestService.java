@@ -4,9 +4,10 @@
  * =============================================================================
  * 목적
  *  - 자연어 Database 질문을 서버의 검증된 Query 실행 흐름에 연결한다.
- *  - Capability 선택, Query 파라미터 생성/검증, Query 실행 순서를 조정한다.
+ *  - 등록된 Capability/Query를 항상 우선 사용한다.
+ *  - 등록된 Query로 처리할 수 없는 경우에만 Safe Text-to-SQL로 fallback한다.
+ *  - 권한/검증/실행 실패를 Safe Text-to-SQL로 우회하지 않는다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
- *  - 실제 Query 실행 및 결과 검증은 하위 공통 계층에 위임한다.
  */
 
 package com.example.enterpriseai.service.database;
@@ -18,6 +19,8 @@ import com.example.enterpriseai.dto.DatabaseQueryResult;
 import com.example.enterpriseai.security.CurrentUser;
 import org.springframework.stereotype.Service;
 
+import java.util.Optional;
+
 @Service
 public class DatabaseQueryRequestService {
 
@@ -26,39 +29,59 @@ public class DatabaseQueryRequestService {
     private final DatabaseQueryParameterResolverSelector parameterResolverSelector;
     private final DatabaseQueryParameterValidator parameterValidator;
     private final DatabaseQueryExecutionService executionService;
+    private final DatabaseSafeTextToSqlService safeTextToSqlService;
 
     public DatabaseQueryRequestService(
             DatabaseQueryCapabilityResolver capabilityResolver,
             DatabaseQueryDefinitionRegistry definitionRegistry,
             DatabaseQueryParameterResolverSelector parameterResolverSelector,
             DatabaseQueryParameterValidator parameterValidator,
-            DatabaseQueryExecutionService executionService
+            DatabaseQueryExecutionService executionService,
+            DatabaseSafeTextToSqlService safeTextToSqlService
     ) {
         this.capabilityResolver = capabilityResolver;
         this.definitionRegistry = definitionRegistry;
         this.parameterResolverSelector = parameterResolverSelector;
         this.parameterValidator = parameterValidator;
         this.executionService = executionService;
+        this.safeTextToSqlService = safeTextToSqlService;
     }
 
     /*
-     * 사용자 자연어 질문을 서버에 등록된 Database Query 실행 흐름으로 연결한다.
+     * 등록된 Database Query를 우선 사용하고,
+     * 처리 가능한 Capability가 없을 때만 Safe Text-to-SQL로 fallback한다.
      */
     public DatabaseQueryResult execute(
             String question,
             CurrentUser currentUser
     ) {
+        validateInput(question, currentUser);
 
-        validateInput(
-                question,
-                currentUser
-        );
-
-        String queryKey =
-                capabilityResolver.resolveQueryKey(
+        Optional<String> queryKey =
+                capabilityResolver.tryResolveQueryKey(
                         question
                 );
 
+        if (queryKey.isPresent()) {
+            return executeRegisteredQuery(
+                    question,
+                    queryKey.get(),
+                    currentUser
+            );
+        }
+
+        return safeTextToSqlService.execute(
+                question,
+                currentUser
+        );
+    }
+
+    // 기존 Phase 10 등록 Query 실행 흐름은 그대로 유지한다.
+    private DatabaseQueryResult executeRegisteredQuery(
+            String question,
+            String queryKey,
+            CurrentUser currentUser
+    ) {
         DatabaseQueryDefinition definition =
                 definitionRegistry.getRequired(
                         queryKey
@@ -92,7 +115,6 @@ public class DatabaseQueryRequestService {
             String question,
             CurrentUser currentUser
     ) {
-
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException(
                     "질문이 없습니다."

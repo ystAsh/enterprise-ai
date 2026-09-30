@@ -6,6 +6,7 @@
  *  - DatabaseSafeQueryBuilder가 서버 정책 범위 안에서만 MSSQL SELECT를 생성하는지 검증한다.
  *  - Filter 값이 SQL 문자열에 직접 결합되지 않고 Binding Parameter로 분리되는지 확인한다.
  *  - 미등록 필드와 지원하지 않는 GROUP BY 요청이 차단되는지 확인한다.
+ *  - 서버의 maxRows 제한이 최종 SQL에 강제되는지 확인한다.
  */
 
 package com.example.enterpriseai.service.database;
@@ -13,6 +14,7 @@ package com.example.enterpriseai.service.database;
 import com.example.enterpriseai.dto.DatabaseQueryPlan;
 import com.example.enterpriseai.dto.DatabaseSafeQuery;
 import com.example.enterpriseai.dto.DatabaseSafeQueryPolicy;
+import com.example.enterpriseai.dto.DatabaseValidationPolicy;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -40,17 +42,7 @@ class DatabaseSafeQueryBuilderTest {
         );
 
         DatabaseSafeQueryPolicy policy =
-                new DatabaseSafeQueryPolicy(
-                        "test-source",
-                        "dbo.allowed_table",
-                        Map.of(
-                                "fieldA", "column_a",
-                                "fieldB", "column_b",
-                                "filterField", "filter_column"
-                        ),
-                        Set.of("fieldA"),
-                        100
-                );
+                createPolicy(100);
 
         DatabaseSafeQuery query =
                 builder.build(plan, policy);
@@ -88,20 +80,11 @@ class DatabaseSafeQueryBuilderTest {
                 10
         );
 
-        DatabaseSafeQueryPolicy policy =
-                new DatabaseSafeQueryPolicy(
-                        "test-source",
-                        "dbo.allowed_table",
-                        Map.of(
-                                "fieldA", "column_a",
-                                "filterField", "filter_column"
-                        ),
-                        Set.of(),
-                        100
-                );
-
         DatabaseSafeQuery query =
-                builder.build(plan, policy);
+                builder.build(
+                        plan,
+                        createPolicy(100)
+                );
 
         assertFalse(
                 query.sql().contains(filterValue)
@@ -129,20 +112,12 @@ class DatabaseSafeQueryBuilderTest {
                 10
         );
 
-        DatabaseSafeQueryPolicy policy =
-                new DatabaseSafeQueryPolicy(
-                        "test-source",
-                        "dbo.allowed_table",
-                        Map.of(
-                                "fieldA", "column_a"
-                        ),
-                        Set.of(),
-                        100
-                );
-
         assertThrows(
                 IllegalArgumentException.class,
-                () -> builder.build(plan, policy)
+                () -> builder.build(
+                        plan,
+                        createPolicy(100)
+                )
         );
     }
 
@@ -156,20 +131,12 @@ class DatabaseSafeQueryBuilderTest {
                 10
         );
 
-        DatabaseSafeQueryPolicy policy =
-                new DatabaseSafeQueryPolicy(
-                        "test-source",
-                        "dbo.allowed_table",
-                        Map.of(
-                                "fieldA", "column_a"
-                        ),
-                        Set.of(),
-                        100
-                );
-
         assertThrows(
                 IllegalArgumentException.class,
-                () -> builder.build(plan, policy)
+                () -> builder.build(
+                        plan,
+                        createPolicy(100)
+                )
         );
     }
 
@@ -183,19 +150,11 @@ class DatabaseSafeQueryBuilderTest {
                 100
         );
 
-        DatabaseSafeQueryPolicy policy =
-                new DatabaseSafeQueryPolicy(
-                        "test-source",
-                        "dbo.allowed_table",
-                        Map.of(
-                                "fieldA", "column_a"
-                        ),
-                        Set.of(),
-                        30
-                );
-
         DatabaseSafeQuery query =
-                builder.build(plan, policy);
+                builder.build(
+                        plan,
+                        createPolicy(30)
+                );
 
         assertEquals(
                 30,
@@ -206,6 +165,45 @@ class DatabaseSafeQueryBuilderTest {
                 query.sql().startsWith(
                         "SELECT TOP (30)"
                 )
+        );
+    }
+
+    private DatabaseSafeQueryPolicy createPolicy(
+            int maxRows
+    ) {
+        DatabaseValidationPolicy validationPolicy =
+                new DatabaseValidationPolicy(
+                        Set.of(
+                                "rows",
+                                "fieldA",
+                                "fieldB",
+                                "filterField"
+                        ),
+                        Set.of(),
+                        10,
+                        maxRows,
+                        1000,
+                        3,
+                        true,
+                        true
+                );
+
+        return new DatabaseSafeQueryPolicy(
+                "SAFE_QUERY",
+                "safe-query-test",
+                "Safe Query Test",
+                "mssql",
+                "SAFE_TEXT_TO_SQL",
+                "dbo.allowed_table",
+                Map.of(
+                        "fieldA", "column_a",
+                        "fieldB", "column_b",
+                        "filterField", "filter_column"
+                ),
+                Set.of("fieldA"),
+                maxRows,
+                Map.of(),
+                validationPolicy
         );
     }
 }

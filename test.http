@@ -28,7 +28,7 @@ Accept: application/json
 %}
 
 
-### Database RAG - AC 31건 / resultReference 발급
+### 4. Database RAG - AC 31건 / resultReference 발급
 POST http://localhost:8080/api/chat
 Content-Type: application/json
 Accept: application/json
@@ -45,16 +45,18 @@ X-XSRF-TOKEN: {{csrfToken}}
     );
 %}
 
-### Database RAG - 전체 결과 조회
+
+### 5. Database RAG - 전체 결과 조회
 GET http://localhost:8080/api/database/results/{{resultReference}}
 Accept: application/json
 
-### Database RAG - 전체 결과 CSV 다운로드
+
+### 6. Database RAG - 전체 결과 CSV 다운로드
 GET http://localhost:8080/api/database/results/{{resultReference}}/download
 Accept: text/csv
 
 
-### Database RAG Phase 10 E2E - 1회
+### 7. Phase 11 Hybrid RAG E2E
 POST http://localhost:8080/api/chat
 Content-Type: application/json
 Accept: application/json
@@ -72,29 +74,22 @@ X-XSRF-TOKEN: {{csrfToken}}
 %}
 
 
-### 전체 결과 조회
+### 8. Hybrid 결과 전체 조회
 GET http://localhost:8080/api/database/results/{{resultReference}}
 Accept: application/json
 
 
-### CSV 다운로드
+### 9. Hybrid 결과 CSV 다운로드
 GET http://localhost:8080/api/database/results/{{resultReference}}/download
 Accept: text/csv
 
 
-### Phase 11 Hybrid RAG E2E
+### Phase 12 Safe Text-to-SQL E2E
 POST http://localhost:8080/api/chat
 Content-Type: application/json
 Accept: application/json
 X-XSRF-TOKEN: {{csrfToken}}
 
 {
-  "question": "AC 시리즈 목록을 조회하고, 관리자도 보안등급 제한을 받는지 관련 문서를 근거로 같이 설명해줘."
+  "question": "내 사용자명과 보안등급을 조회해줘."
 }
-
-> {%
-    client.global.set(
-        "resultReference",
-        response.body.resultReference
-    );
-%}
