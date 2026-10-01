@@ -15,10 +15,10 @@ import com.example.enterpriseai.dto.SecureVerificationEvidence;
 import com.example.enterpriseai.dto.SecureVerificationEvidencePolicy;
 import com.example.enterpriseai.entity.SecureVerificationEvidenceEntity;
 import com.example.enterpriseai.repository.SecureVerificationEvidenceRepository;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.List;

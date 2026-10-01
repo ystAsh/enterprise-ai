@@ -8,11 +8,13 @@
  *    사용자 Mandatory Scope 강제, Safe Query 실행 및 결과 검증 순서를 관리한다.
  *  - LLM이 생성한 Candidate를 직접 실행하지 않는다.
  *  - 서버 등록 정책과 Java 검증을 통과한 결과만 DatabaseQueryResult로 반환한다.
+ *  - Secure Verification 연결이 필요한 경우 내부 실행 Context를 함께 반환한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
 package com.example.enterpriseai.service.database;
 
+import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryPlan;
 import com.example.enterpriseai.dto.DatabaseQueryPlanCandidate;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
@@ -44,8 +46,22 @@ public class DatabaseSafeTextToSqlService {
         this.executionService = executionService;
     }
 
-    // Safe Text-to-SQL 전체 흐름을 실행하고 검증 완료 결과만 반환한다.
+    /*
+     * 기존 호출부 호환용이다.
+     * Secure Verification 연결 정보가 필요한 호출부는 executeWithContext()를 사용한다.
+     */
     public DatabaseQueryResult execute(
+            String question,
+            CurrentUser currentUser
+    ) {
+        return executeWithContext(
+                question,
+                currentUser
+        ).queryResult();
+    }
+
+    // Safe Text-to-SQL 전체 흐름을 실행하고 검증 완료 결과와 내부 실행 Context를 반환한다.
+    public DatabaseQueryExecutionContext executeWithContext(
             String question,
             CurrentUser currentUser
     ) {
@@ -73,7 +89,7 @@ public class DatabaseSafeTextToSqlService {
                         registered.planValidationPolicy()
                 );
 
-        return executionService.execute(
+        return executionService.executeWithContext(
                 plan,
                 registered.safeQueryPolicy()
         );

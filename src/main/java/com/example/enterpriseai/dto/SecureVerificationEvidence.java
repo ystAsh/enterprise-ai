@@ -6,6 +6,9 @@
  *  - 개발자/관리자가 AI 답변의 실제 근거를 재검증하기 위한 내부 Evidence를 표현한다.
  *  - 일반 사용자 Evidence 및 일반 Audit와 분리하여 관리한다.
  *  - 기존 시스템이 제공한 실제 Query 정보 또는 Query 식별정보를 그대로 연결한다.
+ *  - 기존 시스템이 Query Evidence를 제공하지 않는 경우에도 그 상태를 그대로 표현한다.
+ *  - 실제 LLM 호출이 없는 경로는 llmContext가 존재하지 않는 상태로 표현한다.
+ *  - Answer Verification 전에는 verificationStatus가 없는 상태를 허용한다.
  *  - 저장 정책을 통과한 Parameter와 검증 완료 Result만 포함한다.
  *  - 대량 Result는 전체 Rows 대신 resultReference/resultHash로 연결한다.
  *  - 일반 API 응답에 직접 노출하지 않는다.
@@ -61,7 +64,7 @@ public record SecureVerificationEvidence(
 
         if (queryEvidence == null) {
             throw new IllegalArgumentException(
-                    "실제 Query Evidence는 필수입니다."
+                    "Query Evidence 상태 정보는 필수입니다."
             );
         }
 
@@ -81,6 +84,7 @@ public record SecureVerificationEvidence(
 
         resultReference = normalizeOptionalText(resultReference);
         resultHash = normalizeOptionalText(resultHash);
+        llmContext = normalizeOptionalText(llmContext);
 
         // Raw Result가 없으면 참조정보 또는 Hash가 있어야 재검증할 수 있다.
         if (validatedResult.isEmpty()
@@ -92,21 +96,9 @@ public record SecureVerificationEvidence(
             );
         }
 
-        if (llmContext == null || llmContext.isBlank()) {
-            throw new IllegalArgumentException(
-                    "실제 LLM 전달 Context는 필수입니다."
-            );
-        }
-
         if (finalAnswer == null || finalAnswer.isBlank()) {
             throw new IllegalArgumentException(
-                    "최종 AI 답변은 필수입니다."
-            );
-        }
-
-        if (verificationStatus == null) {
-            throw new IllegalArgumentException(
-                    "답변 검증 상태는 필수입니다."
+                    "최종 답변은 필수입니다."
             );
         }
 
@@ -120,14 +112,12 @@ public record SecureVerificationEvidence(
     /*
      * 실제 Query의 원본 소유자가 제공한 검증 정보를 표현한다.
      *
-     * actualQuery:
-     *  - 실제 Query를 안전하게 제공할 수 있을 때만 사용한다.
+     * 실제 Query 또는 Query Reference를 제공하는 시스템:
+     *  - 제공된 값을 그대로 연결한다.
      *
-     * queryReference:
-     *  - 외부 시스템이 실제 Query를 직접 제공하지 않는 경우
-     *    실행 로그 ID 등의 식별정보를 사용한다.
-     *
-     * 둘 중 최소 하나는 존재해야 한다.
+     * 제공하지 않는 시스템:
+     *  - 모든 필드를 null로 유지한다.
+     *  - enterprise-ai가 Query Evidence를 추측하거나 임의 생성하지 않는다.
      */
     public record QueryEvidence(
             String actualQuery,
@@ -137,20 +127,20 @@ public record SecureVerificationEvidence(
     ) {
 
         public QueryEvidence {
-
             actualQuery = normalizeOptionalText(actualQuery);
             queryReference = normalizeOptionalText(queryReference);
             queryVersion = normalizeOptionalText(queryVersion);
             queryHash = normalizeOptionalText(queryHash);
-
-            if (actualQuery == null && queryReference == null) {
-                throw new IllegalArgumentException(
-                        "실제 Query 또는 Query 식별정보가 필요합니다."
-                );
-            }
         }
     }
 
+    /*
+     * null:
+     *  - Answer Verification 수행 전
+     *
+     * 아래 값:
+     *  - 실제 Answer Verification 수행 결과
+     */
     public enum VerificationStatus {
         MATCH,
         MISMATCH,

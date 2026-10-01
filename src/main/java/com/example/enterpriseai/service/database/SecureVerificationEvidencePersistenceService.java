@@ -7,6 +7,7 @@
  *  - Parameter와 Result Map을 JSON 문자열로 직렬화한다.
  *  - Evidence Policy의 보관 기간을 기준으로 expiresAt을 계산한다.
  *  - 저장 정책, Parameter 마스킹, Result 제한 등의 보안 판단은 수행하지 않는다.
+ *  - Answer Verification 전에는 verificationStatus가 없는 상태를 그대로 저장한다.
  *  - 일반 Audit 저장 Transaction과 독립된 Secure Evidence 저장 Transaction을 사용한다.
  */
 
@@ -16,11 +17,10 @@ import com.example.enterpriseai.dto.SecureVerificationEvidence;
 import com.example.enterpriseai.dto.SecureVerificationEvidencePolicy;
 import com.example.enterpriseai.entity.SecureVerificationEvidenceEntity;
 import com.example.enterpriseai.repository.SecureVerificationEvidenceRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.ObjectMapper;
 
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -61,6 +61,11 @@ public class SecureVerificationEvidencePersistenceService {
                 evidence.executedAt()
                         .plusDays(policy.retentionDays());
 
+        String verificationStatus =
+                evidence.verificationStatus() == null
+                        ? null
+                        : evidence.verificationStatus().name();
+
         SecureVerificationEvidenceEntity entity =
                 SecureVerificationEvidenceEntity.create(
                         evidence.question(),
@@ -78,7 +83,7 @@ public class SecureVerificationEvidencePersistenceService {
                         evidence.resultHash(),
                         evidence.llmContext(),
                         evidence.finalAnswer(),
-                        evidence.verificationStatus().name(),
+                        verificationStatus,
                         evidence.executedAt(),
                         expiresAt
                 );
@@ -100,7 +105,7 @@ public class SecureVerificationEvidencePersistenceService {
         try {
             return objectMapper.writeValueAsString(value);
 
-        } catch (JsonProcessingException e) {
+        } catch (RuntimeException e) {
             throw new IllegalStateException(
                     "Secure Verification Evidence JSON 변환에 실패했습니다.",
                     e

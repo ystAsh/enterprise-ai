@@ -5,7 +5,8 @@
  * 목적
  *  - Secure Verification Evidence 조립 시 실제 Query 저장 정책을 검증한다.
  *  - allowActualQuery=false이면 실제 SQL 원문이 제거되는지 확인한다.
- *  - Query Reference는 유지되어 재검증 연결이 가능한지 확인한다.
+ *  - Query Reference가 제공된 경우 재검증 연결 정보가 유지되는지 확인한다.
+ *  - 원본 시스템이 Query Evidence를 제공하지 않아도 임의 값을 생성하지 않는지 확인한다.
  */
 
 package com.example.enterpriseai.service.database;
@@ -109,6 +110,86 @@ class SecureVerificationEvidenceAssemblerTest {
         assertEquals(
                 SecureVerificationEvidence.VerificationStatus.MATCH,
                 evidence.verificationStatus()
+        );
+    }
+
+    @Test
+    void assembleAllowsMissingQueryEvidenceWithoutCreatingFakeReference() {
+        SecureVerificationEvidencePolicy policy =
+                new SecureVerificationEvidencePolicy(
+                        false,
+                        Set.of(),
+                        Set.of(),
+                        SecureVerificationEvidencePolicy.ResultStorageMode.SNAPSHOT,
+                        10,
+                        5000,
+                        5000,
+                        30
+                );
+
+        SecureVerificationEvidence.QueryEvidence queryEvidence =
+                new SecureVerificationEvidence.QueryEvidence(
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        Map<String, Object> validatedResult =
+                Map.of(
+                        "rows",
+                        java.util.List.of(
+                                Map.of(
+                                        "fieldA",
+                                        "valueA"
+                                )
+                        )
+                );
+
+        SecureVerificationEvidence evidence =
+                assembler.assemble(
+                        "현재 데이터를 조회해줘.",
+                        "tem-system",
+                        "REGISTERED_QUERY",
+                        "HTTP_ADAPTER",
+                        queryEvidence,
+                        Map.of(),
+                        validatedResult,
+                        1,
+                        null,
+                        "result-hash-1234",
+                        "검증 완료 조회 결과는 1건입니다.",
+                        "조회 결과는 1건입니다.",
+                        SecureVerificationEvidence.VerificationStatus.MATCH,
+                        LocalDateTime.of(
+                                2026,
+                                9,
+                                30,
+                                12,
+                                0
+                        ),
+                        policy
+                );
+
+        assertNull(
+                evidence.queryEvidence().actualQuery()
+        );
+
+        assertNull(
+                evidence.queryEvidence().queryReference()
+        );
+
+        assertNull(
+                evidence.queryEvidence().queryVersion()
+        );
+
+        assertNull(
+                evidence.queryEvidence().queryHash()
+        );
+
+        assertEquals(
+                1,
+                evidence.resultCount()
         );
     }
 }

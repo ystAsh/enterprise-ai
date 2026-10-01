@@ -7,12 +7,14 @@
  *  - 등록된 Capability/Query를 항상 우선 사용한다.
  *  - 등록된 Query로 처리할 수 없는 경우에만 Safe Text-to-SQL로 fallback한다.
  *  - 권한/검증/실행 실패를 Safe Text-to-SQL로 우회하지 않는다.
+ *  - Secure Verification 연결이 필요한 경우 검증 완료 실행 Context를 함께 반환한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
 package com.example.enterpriseai.service.database;
 
 import com.example.enterpriseai.dto.DatabaseQueryDefinition;
+import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryParameterCandidate;
 import com.example.enterpriseai.dto.DatabaseQueryParameters;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
@@ -48,10 +50,24 @@ public class DatabaseQueryRequestService {
     }
 
     /*
-     * 등록된 Database Query를 우선 사용하고,
-     * 처리 가능한 Capability가 없을 때만 Safe Text-to-SQL로 fallback한다.
+     * 기존 호출부 호환용이다.
+     * Secure Verification 연결 정보가 필요한 호출부는 executeWithContext()를 사용한다.
      */
     public DatabaseQueryResult execute(
+            String question,
+            CurrentUser currentUser
+    ) {
+        return executeWithContext(
+                question,
+                currentUser
+        ).queryResult();
+    }
+
+    /*
+     * 등록 Query를 우선 사용하고 처리 가능한 Capability가 없을 때만
+     * Safe Text-to-SQL로 fallback하여 공통 실행 Context를 반환한다.
+     */
+    public DatabaseQueryExecutionContext executeWithContext(
             String question,
             CurrentUser currentUser
     ) {
@@ -63,21 +79,21 @@ public class DatabaseQueryRequestService {
                 );
 
         if (queryKey.isPresent()) {
-            return executeRegisteredQuery(
+            return executeRegisteredQueryWithContext(
                     question,
                     queryKey.get(),
                     currentUser
             );
         }
 
-        return safeTextToSqlService.execute(
+        return safeTextToSqlService.executeWithContext(
                 question,
                 currentUser
         );
     }
 
-    // 기존 Phase 10 등록 Query 실행 흐름은 그대로 유지한다.
-    private DatabaseQueryResult executeRegisteredQuery(
+    // 기존 등록 Query의 Parameter Resolve/Validation 흐름을 그대로 유지한다.
+    private DatabaseQueryExecutionContext executeRegisteredQueryWithContext(
             String question,
             String queryKey,
             CurrentUser currentUser
@@ -104,7 +120,7 @@ public class DatabaseQueryRequestService {
                         candidate
                 );
 
-        return executionService.execute(
+        return executionService.executeWithContext(
                 question,
                 queryKey,
                 parameters,

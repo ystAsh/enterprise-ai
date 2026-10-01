@@ -6,19 +6,23 @@
  *  - 검증 완료 DatabaseQueryPlan을 Safe Query로 변환하고 MSSQL에서 실행한다.
  *  - 실행 결과를 기존 DatabaseResultValidator로 검증한다.
  *  - 검증 완료 결과를 DatabaseQueryResult로 변환한다.
+ *  - Secure Verification 연결이 필요한 경우 실제 실행 Parameter와 Query Evidence를 함께 반환한다.
  *  - Safe Text-to-SQL의 실행/결과 검증 경계를 하나의 공통 흐름으로 관리한다.
  */
 
 package com.example.enterpriseai.service.database;
 
+import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryPlan;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
 import com.example.enterpriseai.dto.DatabaseQueryResultMetadata;
 import com.example.enterpriseai.dto.DatabaseSafeQuery;
 import com.example.enterpriseai.dto.DatabaseSafeQueryPolicy;
+import com.example.enterpriseai.dto.SecureVerificationEvidence;
 import com.example.enterpriseai.service.security.DatabaseResultValidator;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -42,8 +46,22 @@ public class DatabaseSafeQueryExecutionService {
         this.resultValidator = resultValidator;
     }
 
-    // 검증 완료 Query Plan을 실행하고 검증 완료 DatabaseQueryResult로 변환한다.
+    /*
+     * 기존 호출부 호환용이다.
+     * Secure Verification 연결 정보가 필요한 호출부는 executeWithContext()를 사용한다.
+     */
     public DatabaseQueryResult execute(
+            DatabaseQueryPlan plan,
+            DatabaseSafeQueryPolicy policy
+    ) {
+        return executeWithContext(
+                plan,
+                policy
+        ).queryResult();
+    }
+
+    // Safe Query를 실제 실행하고 검증 완료 결과와 내부 실행 Context를 함께 반환한다.
+    public DatabaseQueryExecutionContext executeWithContext(
             DatabaseQueryPlan plan,
             DatabaseSafeQueryPolicy policy
     ) {
@@ -98,11 +116,31 @@ public class DatabaseSafeQueryExecutionService {
                         true
                 );
 
-        return new DatabaseQueryResult(
-                policy.queryType(),
-                validatedResult,
-                metadata,
-                evidence
+        DatabaseQueryResult queryResult =
+                new DatabaseQueryResult(
+                        policy.queryType(),
+                        validatedResult,
+                        metadata,
+                        evidence
+                );
+
+        // enterprise-ai가 실제 생성하고 Executor에 전달한 Safe Query를 Evidence로 유지한다.
+        SecureVerificationEvidence.QueryEvidence queryEvidence =
+                new SecureVerificationEvidence.QueryEvidence(
+                        safeQuery.sql(),
+                        null,
+                        null,
+                        null
+                );
+
+        return new DatabaseQueryExecutionContext(
+                queryResult,
+                safeQuery.parameters(),
+                policy.source(),
+                policy.queryKey(),
+                policy.executionType(),
+                queryEvidence,
+                LocalDateTime.now()
         );
     }
 }

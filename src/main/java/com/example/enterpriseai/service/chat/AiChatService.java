@@ -8,21 +8,22 @@
  *  - 소량 Database 결과만 Gemini와 채팅 화면에 직접 전달한다.
  *  - 대량 Database 결과는 전체 데이터를 Gemini와 채팅 응답에 전달하지 않는다.
  *  - 대량 Database 결과는 서버에 보관하고 opaque resultReference만 외부에 전달한다.
- *  - 전체 결과 조회 및 다운로드 가능 여부를 안전한 응답 정보로 제공한다.
+ *  - Database 실행 근거와 실제 답변을 Secure Verification Evidence로 저장한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
 package com.example.enterpriseai.service.chat;
 
 import com.example.enterpriseai.dto.ChatResponse;
+import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
+import com.example.enterpriseai.dto.SecureVerificationEvidence;
+import com.example.enterpriseai.dto.SecureVerificationEvidencePolicy;
 import com.example.enterpriseai.security.CurrentUser;
-import com.example.enterpriseai.service.database.DatabaseQueryRequestService;
-import com.example.enterpriseai.service.database.DatabaseRagService;
-import com.example.enterpriseai.service.database.DatabaseResultPresentationPolicy;
-import com.example.enterpriseai.service.database.DatabaseResultReferenceStore;
+import com.example.enterpriseai.service.database.*;
 import com.example.enterpriseai.service.document.DocumentRagService;
 import com.example.enterpriseai.service.hybrid.HybridRagService;
+import com.example.enterpriseai.service.security.SecureVerificationEvidencePolicyProvider;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -35,6 +36,9 @@ public class AiChatService {
     private final DatabaseResultPresentationPolicy presentationPolicy;
     private final DatabaseResultReferenceStore resultReferenceStore;
     private final HybridRagService hybridRagService;
+    private final SecureVerificationEvidenceAssembler secureEvidenceAssembler;
+    private final SecureVerificationEvidencePersistenceService secureEvidencePersistenceService;
+    private final SecureVerificationEvidencePolicyProvider secureEvidencePolicyProvider;
 
     public AiChatService(
             QuestionRouterService questionRouterService,
@@ -43,7 +47,10 @@ public class AiChatService {
             DatabaseRagService databaseRagService,
             DatabaseResultPresentationPolicy presentationPolicy,
             DatabaseResultReferenceStore resultReferenceStore,
-            HybridRagService hybridRagService
+            HybridRagService hybridRagService,
+            SecureVerificationEvidenceAssembler secureEvidenceAssembler,
+            SecureVerificationEvidencePersistenceService secureEvidencePersistenceService,
+            SecureVerificationEvidencePolicyProvider secureEvidencePolicyProvider
     ) {
         this.questionRouterService = questionRouterService;
         this.documentRagService = documentRagService;
@@ -52,6 +59,9 @@ public class AiChatService {
         this.presentationPolicy = presentationPolicy;
         this.resultReferenceStore = resultReferenceStore;
         this.hybridRagService = hybridRagService;
+        this.secureEvidenceAssembler = secureEvidenceAssembler;
+        this.secureEvidencePersistenceService = secureEvidencePersistenceService;
+        this.secureEvidencePolicyProvider = secureEvidencePolicyProvider;
     }
 
     public String generateAnswer(
@@ -98,11 +108,14 @@ public class AiChatService {
             String question,
             CurrentUser currentUser
     ) {
-        DatabaseQueryResult queryResult =
-                databaseQueryRequestService.execute(
+        DatabaseQueryExecutionContext executionContext =
+                databaseQueryRequestService.executeWithContext(
                         question,
                         currentUser
                 );
+
+        DatabaseQueryResult queryResult =
+                executionContext.queryResult();
 
         DatabaseResultPresentationPolicy.PresentationType presentationType =
                 presentationPolicy.determine(
@@ -113,30 +126,43 @@ public class AiChatService {
             case INLINE ->
                     answerInlineDatabase(
                             question,
-                            queryResult
+                            executionContext
                     );
 
             case EXTERNAL ->
                     answerExternalDatabase(
-                            queryResult,
+                            question,
+                            executionContext,
                             currentUser
                     );
         };
     }
 
-    // 소량 결과는 검증 완료 데이터만 Gemini와 React에 전달한다.
+    // 소량 결과는 실제 Gemini Context와 최종 Answer를 함께 저장한다.
     private ChatResponse answerInlineDatabase(
             String question,
-            DatabaseQueryResult queryResult
+            DatabaseQueryExecutionContext executionContext
     ) {
-        String answer =
-                databaseRagService.answer(
+        DatabaseQueryResult queryResult =
+                executionContext.queryResult();
+
+        DatabaseRagService.DatabaseRagAnswer ragAnswer =
+                databaseRagService.answerWithContext(
                         question,
                         queryResult
                 );
 
+        saveSecureEvidence(
+                question,
+                executionContext,
+                SecureVerificationEvidencePolicy.ResultStorageMode.SNAPSHOT,
+                null,
+                ragAnswer.llmContext(),
+                ragAnswer.answer()
+        );
+
         return new ChatResponse(
-                answer,
+                ragAnswer.answer(),
                 queryResult.data(),
                 queryResult.metadata().totalCount(),
                 queryResult.metadata().returnedCount(),
@@ -146,11 +172,15 @@ public class AiChatService {
         );
     }
 
-    // 대량 결과는 서버에 보관하고 외부에는 opaque resultReference만 전달한다.
+    // 대량 결과는 Raw Result를 Evidence에 저장하지 않고 resultReference로 연결한다.
     private ChatResponse answerExternalDatabase(
-            DatabaseQueryResult queryResult,
+            String question,
+            DatabaseQueryExecutionContext executionContext,
             CurrentUser currentUser
     ) {
+        DatabaseQueryResult queryResult =
+                executionContext.queryResult();
+
         int returnedCount =
                 queryResult.metadata().returnedCount();
 
@@ -165,6 +195,15 @@ public class AiChatService {
                         + "건의 조회 결과가 있습니다. "
                         + "전체 결과를 조회하거나 파일로 다운로드할 수 있습니다.";
 
+        saveSecureEvidence(
+                question,
+                executionContext,
+                SecureVerificationEvidencePolicy.ResultStorageMode.REFERENCE_ONLY,
+                resultReference,
+                null,
+                answer
+        );
+
         return new ChatResponse(
                 answer,
                 null,
@@ -173,6 +212,50 @@ public class AiChatService {
                 true,
                 resultReference,
                 true
+        );
+    }
+
+    // 실제 실행 정보와 최종 응답을 Secure Verification Evidence로 저장한다.
+    private void saveSecureEvidence(
+            String question,
+            DatabaseQueryExecutionContext executionContext,
+            SecureVerificationEvidencePolicy.ResultStorageMode resultStorageMode,
+            String resultReference,
+            String llmContext,
+            String finalAnswer
+    ) {
+        DatabaseQueryResult queryResult =
+                executionContext.queryResult();
+
+        SecureVerificationEvidencePolicy policy =
+                secureEvidencePolicyProvider.create(
+                        executionContext.executedParameters().keySet(),
+                        resultStorageMode,
+                        presentationPolicy.inlineMaxRows()
+                );
+
+        SecureVerificationEvidence evidence =
+                secureEvidenceAssembler.assemble(
+                        question,
+                        executionContext.source(),
+                        executionContext.queryKey(),
+                        executionContext.executionType(),
+                        executionContext.queryEvidence(),
+                        executionContext.executedParameters(),
+                        queryResult.data(),
+                        queryResult.metadata().returnedCount(),
+                        resultReference,
+                        null,
+                        llmContext,
+                        finalAnswer,
+                        null,
+                        executionContext.executedAt(),
+                        policy
+                );
+
+        secureEvidencePersistenceService.save(
+                evidence,
+                policy
         );
     }
 

@@ -7,6 +7,7 @@
  *  - 서버에 등록된 Query만 실행하고 실행 전/후 보안 검증을 강제한다.
  *  - 검증 완료된 실행 파라미터를 Executor에 전달한다.
  *  - 검증 완료 결과와 공통 결과 Metadata를 DatabaseQueryResult로 변환한다.
+ *  - Secure Verification 연결이 필요한 경우 내부 실행 Context를 함께 반환한다.
  *  - 사용자 질문과 Query 실행/검증 상태를 일반 Audit Log에 기록한다.
  *  - 특정 회사, 업무, 테이블, Repository, Mapper에 종속되지 않는다.
  */
@@ -14,15 +15,18 @@
 package com.example.enterpriseai.service.database;
 
 import com.example.enterpriseai.dto.DatabaseQueryDefinition;
+import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryExecutionResult;
 import com.example.enterpriseai.dto.DatabaseQueryParameters;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
 import com.example.enterpriseai.dto.DatabaseQueryResultMetadata;
+import com.example.enterpriseai.dto.SecureVerificationEvidence;
 import com.example.enterpriseai.security.CurrentUser;
 import com.example.enterpriseai.service.security.DatabaseQueryValidator;
 import com.example.enterpriseai.service.security.DatabaseResultValidator;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -53,8 +57,26 @@ public class DatabaseQueryExecutionService {
         this.auditLogService = auditLogService;
     }
 
-    // 서버에 등록된 Query를 실행하고 검증 완료 결과만 반환한다.
+    /*
+     * 기존 호출부 호환용이다.
+     * Secure Verification 연결 정보가 필요한 호출부는 executeWithContext()를 사용한다.
+     */
     public DatabaseQueryResult execute(
+            String question,
+            String queryKey,
+            DatabaseQueryParameters parameters,
+            CurrentUser currentUser
+    ) {
+        return executeWithContext(
+                question,
+                queryKey,
+                parameters,
+                currentUser
+        ).queryResult();
+    }
+
+    // 서버에 등록된 Query를 실행하고 검증 완료 결과와 내부 실행 Context를 반환한다.
+    public DatabaseQueryExecutionContext executeWithContext(
             String question,
             String queryKey,
             DatabaseQueryParameters parameters,
@@ -165,6 +187,9 @@ public class DatabaseQueryExecutionService {
                         evidence
                 );
 
+        LocalDateTime executedAt =
+                LocalDateTime.now();
+
         // 7. 성공 Audit Log
         auditLogService.save(
                 question,
@@ -178,7 +203,25 @@ public class DatabaseQueryExecutionService {
                 elapsedMs(startedAt)
         );
 
-        return queryResult;
+        // 8. 기존 시스템이 제공하지 않은 Query Evidence는 임의 생성하지 않는다.
+        SecureVerificationEvidence.QueryEvidence queryEvidence =
+                new SecureVerificationEvidence.QueryEvidence(
+                        null,
+                        null,
+                        null,
+                        null
+                );
+
+        // 9. 검증 완료 실행 정보와 내부 실행 Context 생성
+        return new DatabaseQueryExecutionContext(
+                queryResult,
+                parameters.values(),
+                definition.source(),
+                definition.queryKey(),
+                definition.executionType(),
+                queryEvidence,
+                executedAt
+        );
     }
 
     private void validateInput(

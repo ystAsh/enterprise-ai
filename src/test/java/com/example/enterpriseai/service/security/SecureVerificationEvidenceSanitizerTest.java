@@ -7,6 +7,7 @@
  *  - 허용되지 않은 Parameter가 저장되지 않는지 확인한다.
  *  - 민감 Parameter가 원문 대신 마스킹되는지 확인한다.
  *  - Snapshot 허용 범위를 초과한 대량 Result가 저장되지 않는지 확인한다.
+ *  - LLM 미사용 경로의 Context가 null 상태로 유지되는지 확인한다.
  */
 
 package com.example.enterpriseai.service.security;
@@ -115,6 +116,35 @@ class SecureVerificationEvidenceSanitizerTest {
         assertEquals(
                 "Secure Verification Evidence Snapshot 최대 행 수를 초과했습니다.",
                 exception.getMessage()
+        );
+    }
+
+    @Test
+    void sanitizeContextAllowsMissingContextWhenLlmWasNotUsed() {
+        SecureVerificationEvidencePolicy policy =
+                new SecureVerificationEvidencePolicy(
+                        false,
+                        Set.of(),
+                        Set.of(),
+                        SecureVerificationEvidencePolicy.ResultStorageMode.SNAPSHOT,
+                        10,
+                        5000,
+                        5000,
+                        30
+                );
+
+        assertNull(
+                sanitizer.sanitizeContext(
+                        null,
+                        policy
+                )
+        );
+
+        assertNull(
+                sanitizer.sanitizeContext(
+                        "   ",
+                        policy
+                )
         );
     }
 }

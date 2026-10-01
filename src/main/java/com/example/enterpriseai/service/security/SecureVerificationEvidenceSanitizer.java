@@ -7,6 +7,7 @@
  *  - 허용되지 않은 Parameter 저장과 민감 Parameter 원문 저장을 차단한다.
  *  - 대량 Result가 Evidence에 그대로 저장되지 않도록 저장 방식을 강제한다.
  *  - 실제 LLM Context와 최종 Answer가 정책 크기를 초과하는 경우 저장을 차단한다.
+ *  - LLM을 호출하지 않은 경로는 llmContext가 없는 상태를 그대로 유지한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
@@ -98,18 +99,27 @@ public class SecureVerificationEvidenceSanitizer {
         };
     }
 
-    // 실제 Gemini에 전달한 Context 원문을 길이 제한 안에서만 허용한다.
+    // 실제 Gemini 호출이 있었던 경우의 Context만 길이 제한 안에서 유지한다.
     public String sanitizeContext(
             String llmContext,
             SecureVerificationEvidencePolicy policy
     ) {
         requirePolicy(policy);
 
-        return requireTextWithinLimit(
-                llmContext,
-                policy.maxContextLength(),
-                "LLM Context"
-        );
+        String normalizedContext =
+                normalizeOptionalText(llmContext);
+
+        if (normalizedContext == null) {
+            return null;
+        }
+
+        if (normalizedContext.length() > policy.maxContextLength()) {
+            throw new IllegalArgumentException(
+                    "LLM Context가 저장 허용 길이를 초과했습니다."
+            );
+        }
+
+        return normalizedContext;
     }
 
     // 실제 최종 Answer 원문을 길이 제한 안에서만 허용한다.
@@ -122,7 +132,7 @@ public class SecureVerificationEvidenceSanitizer {
         return requireTextWithinLimit(
                 finalAnswer,
                 policy.maxAnswerLength(),
-                "최종 AI 답변"
+                "최종 답변"
         );
     }
 

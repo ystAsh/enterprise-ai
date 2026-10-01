@@ -7,6 +7,7 @@
  *  - 일반 Audit 및 일반 사용자 Evidence와 분리하여 관리한다.
  *  - Policy와 Sanitizer를 통과한 검증 정보만 저장 대상으로 사용한다.
  *  - 실제 Query, Parameter, Result의 저장 여부를 이 Entity가 판단하지 않는다.
+ *  - LLM 미사용 및 Answer Verification 전 상태를 nullable 컬럼으로 표현한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
@@ -67,13 +68,13 @@ public class SecureVerificationEvidenceEntity {
     @Column(name = "result_hash", length = 128)
     private String resultHash;
 
-    @Column(name = "llm_context", nullable = false, columnDefinition = "nvarchar(max)")
+    @Column(name = "llm_context", columnDefinition = "nvarchar(max)")
     private String llmContext;
 
     @Column(name = "final_answer", nullable = false, columnDefinition = "nvarchar(max)")
     private String finalAnswer;
 
-    @Column(name = "verification_status", nullable = false, length = 20)
+    @Column(name = "verification_status", length = 20)
     private String verificationStatus;
 
     @Column(name = "executed_at", nullable = false)

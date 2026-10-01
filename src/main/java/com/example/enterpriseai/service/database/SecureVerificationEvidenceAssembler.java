@@ -6,6 +6,7 @@
  *  - Query 실행 및 AI 답변 검증 정보를 Secure Verification Evidence로 조립한다.
  *  - Parameter, Result, LLM Context, Answer는 저장 정책과 Sanitizer를 통과시킨다.
  *  - 실제 Query는 정책에서 허용한 경우에만 Evidence에 포함한다.
+ *  - 기존 시스템이 Query Evidence를 제공하지 않는 경우 그 상태를 그대로 유지한다.
  *  - 일반 Audit 및 일반 사용자 Evidence와 분리된 내부 검증 구조를 생성한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
@@ -108,7 +109,7 @@ public class SecureVerificationEvidenceAssembler {
 
     /*
      * 실제 Query 원문은 정책이 허용한 경우에만 유지한다.
-     * 허용하지 않는 경우 Query Reference가 있어야 재검증 연결이 가능하다.
+     * 원본 시스템이 Query Reference를 제공하지 않아도 임의로 생성하지 않는다.
      */
     private SecureVerificationEvidence.QueryEvidence sanitizeQueryEvidence(
             SecureVerificationEvidence.QueryEvidence queryEvidence,
@@ -116,20 +117,12 @@ public class SecureVerificationEvidenceAssembler {
     ) {
         if (queryEvidence == null) {
             throw new IllegalArgumentException(
-                    "실제 Query Evidence는 필수입니다."
+                    "Query Evidence 상태 정보는 필수입니다."
             );
         }
 
         if (policy.allowActualQuery()) {
             return queryEvidence;
-        }
-
-        if (queryEvidence.queryReference() == null
-                || queryEvidence.queryReference().isBlank()) {
-
-            throw new IllegalArgumentException(
-                    "실제 Query 저장이 금지된 경우 Query Reference가 필요합니다."
-            );
         }
 
         return new SecureVerificationEvidence.QueryEvidence(
