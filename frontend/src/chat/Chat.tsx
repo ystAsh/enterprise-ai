@@ -7,6 +7,7 @@
  *  - 사용자 질문을 Spring Boot /api/chat API로 전달한다.
  *  - CSRF 토큰을 포함하여 세션 기반 요청을 안전하게 처리한다.
  *  - Gemini 답변과 검증 완료 구조화 데이터를 화면에 표시한다.
+ *  - Answer Verification의 안전한 상태와 Match Rate를 답변과 함께 표시한다.
  *  - 특정 업무 필드에 종속되지 않는 동적 결과 테이블을 제공한다.
  *  - 대량 결과는 resultReference를 이용하여 전체조회 및 CSV 다운로드를 제공한다.
  */
@@ -22,6 +23,12 @@ type CsrfResponse = {
     parameterName: string
 }
 
+type VerificationStatus =
+    | 'MATCH'
+    | 'MISMATCH'
+    | 'UNSUPPORTED'
+    | 'MISSING'
+
 type ChatResponse = {
     answer: string
     data: Record<string, unknown> | null
@@ -30,6 +37,8 @@ type ChatResponse = {
     hasMore: boolean
     resultReference: string | null
     downloadAvailable: boolean
+    verificationStatus: VerificationStatus | null
+    matchRate: number | null
 }
 
 type DatabaseResultReferenceResponse = {
@@ -51,6 +60,11 @@ function Chat() {
         useState<Record<string, unknown> | null>(null)
     const [resultReference, setResultReference] =
         useState<string | null>(null)
+
+    const [verificationStatus, setVerificationStatus] =
+        useState<VerificationStatus | null>(null)
+    const [matchRate, setMatchRate] =
+        useState<number | null>(null)
 
     const [downloadAvailable, setDownloadAvailable] = useState(false)
     const [loading, setLoading] = useState(false)
@@ -122,8 +136,49 @@ function Chat() {
         return '[구조화 데이터]'
     }
 
+    // Verification 상태와 Match Rate를 사용자가 이해할 수 있는 최소 문구로 변환한다.
+    const getVerificationLabel = (): string | null => {
+        if (!verificationStatus) {
+            return null
+        }
+
+        if (matchRate === null) {
+            return '근거 일치 평가 불가'
+        }
+
+        const rateLabel =
+            Number.isInteger(matchRate)
+                ? matchRate.toFixed(0)
+                : matchRate.toFixed(2)
+
+        return switchVerificationLabel(
+            verificationStatus,
+            rateLabel
+        )
+    }
+
+    const switchVerificationLabel = (
+        status: VerificationStatus,
+        rateLabel: string
+    ): string => {
+        switch (status) {
+            case 'MATCH':
+                return `✓ 근거 일치 ${rateLabel}%`
+
+            case 'MISMATCH':
+                return `! 근거 일치 ${rateLabel}% · 불일치 있음`
+
+            case 'MISSING':
+                return `! 근거 일치 ${rateLabel}% · 누락 있음`
+
+            case 'UNSUPPORTED':
+                return `! 근거 일치 ${rateLabel}% · 근거 확인 필요`
+        }
+    }
+
     const tableRows = findTableRows(resultData)
     const tableColumns = findTableColumns(tableRows)
+    const verificationLabel = getVerificationLabel()
 
     const handleLogout = async () => {
         try {
@@ -263,6 +318,8 @@ function Chat() {
         setResultData(null)
         setResultReference(null)
         setDownloadAvailable(false)
+        setVerificationStatus(null)
+        setMatchRate(null)
 
         try {
             const csrfResponse = await fetch('/api/auth/csrf', {
@@ -300,6 +357,8 @@ function Chat() {
             setResultData(result.data)
             setResultReference(result.resultReference)
             setDownloadAvailable(result.downloadAvailable)
+            setVerificationStatus(result.verificationStatus)
+            setMatchRate(result.matchRate)
             setQuestion('')
         } catch (error) {
             console.error('채팅 요청 실패', error)
@@ -380,6 +439,18 @@ function Chat() {
                                 <div className="message-markdown">
                                     <ReactMarkdown>{answer}</ReactMarkdown>
                                 </div>
+
+                                {verificationLabel && (
+                                    <div className="verification-summary">
+                                        <span
+                                            className={
+                                                `verification-badge verification-${verificationStatus?.toLowerCase()}`
+                                            }
+                                        >
+                                            {verificationLabel}
+                                        </span>
+                                    </div>
+                                )}
 
                                 {resultReference && (
                                     <div className="result-actions">

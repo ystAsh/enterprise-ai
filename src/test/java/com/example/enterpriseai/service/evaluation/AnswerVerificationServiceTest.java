@@ -196,4 +196,54 @@ class AnswerVerificationServiceTest {
                 result.verifierVersion()
         );
     }
+
+    @Test
+    void doesNotMatchNumericValueInsideLargerNumber() {
+        Map<String, Object> validatedResult =
+                Map.of(
+                        "fieldA",
+                        3
+                );
+
+        AnswerVerificationResult result =
+                service.verify(
+                        validatedResult,
+                        "총 31건입니다.",
+                        AnswerVerificationPolicy.noneRequired()
+                );
+
+        assertEquals(
+                VerificationStatus.UNSUPPORTED,
+                result.overallStatus()
+        );
+
+        assertEquals(0, result.matchedFactCount());
+        assertEquals(0, result.comparableFactCount());
+        assertNull(result.matchRate());
+    }
+
+    @Test
+    void doesNotMatchBooleanValueInsideLargerWord() {
+        Map<String, Object> validatedResult =
+                Map.of(
+                        "fieldA",
+                        true
+                );
+
+        AnswerVerificationResult result =
+                service.verify(
+                        validatedResult,
+                        "untrue라는 문자열입니다.",
+                        AnswerVerificationPolicy.noneRequired()
+                );
+
+        assertEquals(
+                VerificationStatus.UNSUPPORTED,
+                result.overallStatus()
+        );
+
+        assertEquals(0, result.matchedFactCount());
+        assertEquals(0, result.comparableFactCount());
+        assertNull(result.matchRate());
+    }
 }

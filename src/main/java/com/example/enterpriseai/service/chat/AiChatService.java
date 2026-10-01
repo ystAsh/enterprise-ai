@@ -9,11 +9,15 @@
  *  - 대량 Database 결과는 전체 데이터를 Gemini와 채팅 응답에 전달하지 않는다.
  *  - 대량 Database 결과는 서버에 보관하고 opaque resultReference만 외부에 전달한다.
  *  - Database 실행 근거와 실제 답변을 Secure Verification Evidence로 저장한다.
+ *  - INLINE Database 답변은 검증 완료 Evidence 기준으로 deterministic Answer Verification을 수행한다.
+ *  - Answer Verification 결과를 Evaluation DB에 저장한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
 package com.example.enterpriseai.service.chat;
 
+import com.example.enterpriseai.dto.AnswerVerificationPolicy;
+import com.example.enterpriseai.dto.AnswerVerificationResult;
 import com.example.enterpriseai.dto.ChatResponse;
 import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
@@ -22,6 +26,8 @@ import com.example.enterpriseai.dto.SecureVerificationEvidencePolicy;
 import com.example.enterpriseai.security.CurrentUser;
 import com.example.enterpriseai.service.database.*;
 import com.example.enterpriseai.service.document.DocumentRagService;
+import com.example.enterpriseai.service.evaluation.AnswerVerificationResultPersistenceService;
+import com.example.enterpriseai.service.evaluation.AnswerVerificationService;
 import com.example.enterpriseai.service.hybrid.HybridRagService;
 import com.example.enterpriseai.service.security.SecureVerificationEvidencePolicyProvider;
 import org.springframework.stereotype.Service;
@@ -39,6 +45,8 @@ public class AiChatService {
     private final SecureVerificationEvidenceAssembler secureEvidenceAssembler;
     private final SecureVerificationEvidencePersistenceService secureEvidencePersistenceService;
     private final SecureVerificationEvidencePolicyProvider secureEvidencePolicyProvider;
+    private final AnswerVerificationService answerVerificationService;
+    private final AnswerVerificationResultPersistenceService answerVerificationPersistenceService;
 
     public AiChatService(
             QuestionRouterService questionRouterService,
@@ -50,7 +58,9 @@ public class AiChatService {
             HybridRagService hybridRagService,
             SecureVerificationEvidenceAssembler secureEvidenceAssembler,
             SecureVerificationEvidencePersistenceService secureEvidencePersistenceService,
-            SecureVerificationEvidencePolicyProvider secureEvidencePolicyProvider
+            SecureVerificationEvidencePolicyProvider secureEvidencePolicyProvider,
+            AnswerVerificationService answerVerificationService,
+            AnswerVerificationResultPersistenceService answerVerificationPersistenceService
     ) {
         this.questionRouterService = questionRouterService;
         this.documentRagService = documentRagService;
@@ -62,6 +72,8 @@ public class AiChatService {
         this.secureEvidenceAssembler = secureEvidenceAssembler;
         this.secureEvidencePersistenceService = secureEvidencePersistenceService;
         this.secureEvidencePolicyProvider = secureEvidencePolicyProvider;
+        this.answerVerificationService = answerVerificationService;
+        this.answerVerificationPersistenceService = answerVerificationPersistenceService;
     }
 
     public String generateAnswer(
@@ -138,7 +150,7 @@ public class AiChatService {
         };
     }
 
-    // 소량 결과는 실제 Gemini Context와 최종 Answer를 함께 저장한다.
+    // 소량 결과는 Gemini 답변 생성 후 Secure Evidence 저장과 deterministic 검증을 수행한다.
     private ChatResponse answerInlineDatabase(
             String question,
             DatabaseQueryExecutionContext executionContext
@@ -152,13 +164,26 @@ public class AiChatService {
                         queryResult
                 );
 
-        saveSecureEvidence(
-                question,
-                executionContext,
-                SecureVerificationEvidencePolicy.ResultStorageMode.SNAPSHOT,
-                null,
-                ragAnswer.llmContext(),
-                ragAnswer.answer()
+        Long verificationEvidenceId =
+                saveSecureEvidence(
+                        question,
+                        executionContext,
+                        SecureVerificationEvidencePolicy.ResultStorageMode.SNAPSHOT,
+                        null,
+                        ragAnswer.llmContext(),
+                        ragAnswer.answer()
+                );
+
+        AnswerVerificationResult verificationResult =
+                answerVerificationService.verify(
+                        queryResult.data(),
+                        ragAnswer.answer(),
+                        AnswerVerificationPolicy.noneRequired()
+                );
+
+        answerVerificationPersistenceService.save(
+                verificationEvidenceId,
+                verificationResult
         );
 
         return new ChatResponse(
@@ -168,7 +193,9 @@ public class AiChatService {
                 queryResult.metadata().returnedCount(),
                 false,
                 null,
-                false
+                false,
+                verificationResult.overallStatus(),
+                verificationResult.matchRate()
         );
     }
 
@@ -215,8 +242,8 @@ public class AiChatService {
         );
     }
 
-    // 실제 실행 정보와 최종 응답을 Secure Verification Evidence로 저장한다.
-    private void saveSecureEvidence(
+    // 실제 실행 정보와 최종 응답을 저장하고 Secure Verification Evidence ID를 반환한다.
+    private Long saveSecureEvidence(
             String question,
             DatabaseQueryExecutionContext executionContext,
             SecureVerificationEvidencePolicy.ResultStorageMode resultStorageMode,
@@ -253,7 +280,7 @@ public class AiChatService {
                         policy
                 );
 
-        secureEvidencePersistenceService.save(
+        return secureEvidencePersistenceService.save(
                 evidence,
                 policy
         );
