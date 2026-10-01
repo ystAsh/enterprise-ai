@@ -72,6 +72,70 @@ type SseEvent = {
 
 type TableRow = Record<string, unknown>
 
+function ProgressIcon({
+                          iconKey
+                      }: {
+    iconKey: string
+}) {
+    const commonProps = {
+        width: 16,
+        height: 16,
+        viewBox: '0 0 24 24',
+        fill: 'none',
+        stroke: 'currentColor',
+        strokeWidth: 2,
+        strokeLinecap: 'round' as const,
+        strokeLinejoin: 'round' as const
+    }
+
+    switch (iconKey) {
+        case 'analysis':
+            return (
+                <svg {...commonProps} aria-hidden="true">
+                    <circle cx="11" cy="11" r="7" />
+                    <path d="m20 20-4-4" />
+                </svg>
+            )
+
+        case 'document':
+            return (
+                <svg {...commonProps} aria-hidden="true">
+                    <path d="M6 2h9l4 4v16H6z" />
+                    <path d="M14 2v5h5" />
+                    <path d="M9 13h6" />
+                    <path d="M9 17h6" />
+                </svg>
+            )
+
+        case 'database':
+            return (
+                <svg {...commonProps} aria-hidden="true">
+                    <ellipse cx="12" cy="5" rx="8" ry="3" />
+                    <path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5" />
+                    <path d="M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6" />
+                </svg>
+            )
+
+        case 'answer':
+            return (
+                <svg {...commonProps} aria-hidden="true">
+                    <path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z" />
+                </svg>
+            )
+
+        case 'verification':
+            return (
+                <svg {...commonProps} aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m8 12 2.5 2.5L16 9" />
+                </svg>
+            )
+
+        default:
+            return null
+    }
+}
+
 function Chat() {
     const [question, setQuestion] = useState('')
     const [answer, setAnswer] = useState('')
@@ -87,6 +151,7 @@ function Chat() {
     const [downloadAvailable, setDownloadAvailable] = useState(false)
     const [loading, setLoading] = useState(false)
     const [progressText, setProgressText] = useState('')
+    const [progressIconKey, setProgressIconKey] = useState('')
     const [resultLoading, setResultLoading] = useState(false)
     const [errorMessage, setErrorMessage] = useState('')
 
@@ -230,6 +295,7 @@ function Chat() {
                 JSON.parse(event.data)
 
             setProgressText(progress.displayText)
+            setProgressIconKey(progress.iconKey)
             return false
         }
 
@@ -244,6 +310,7 @@ function Chat() {
             setVerificationStatus(result.verificationStatus)
             setMatchRate(result.matchRate)
             setProgressText('')
+            setProgressIconKey('')
 
             return true
         }
@@ -465,6 +532,7 @@ function Chat() {
 
             setLoading(true)
             setProgressText('')
+            setProgressIconKey('')
             setErrorMessage('')
             setResultData(null)
             setResultReference(null)
@@ -514,6 +582,7 @@ function Chat() {
             } catch (error) {
                 console.error('채팅 요청 실패', error)
                 setProgressText('')
+                setProgressIconKey('')
                 setErrorMessage(
                     '답변을 가져오지 못했습니다.'
                 )
@@ -578,7 +647,19 @@ function Chat() {
                             <div className="message-avatar">AI</div>
 
                             <div className="message-content">
-                                <p>
+                                <p
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                    }}
+                                >
+                                    {progressIconKey && (
+                                        <ProgressIcon
+                                            iconKey={progressIconKey}
+                                        />
+                                    )}
+
                                     {progressText
                                         || '답변을 준비하고 있습니다...'}
                                 </p>

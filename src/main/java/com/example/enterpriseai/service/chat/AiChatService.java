@@ -10,6 +10,7 @@
  *  - 대량 Database 결과는 서버에 보관하고 opaque resultReference만 외부에 전달한다.
  *  - Database 실행 근거와 실제 답변을 Secure Verification Evidence로 저장한다.
  *  - INLINE Database 답변은 검증 완료 Evidence 기준으로 deterministic Answer Verification을 수행한다.
+ *  - EXTERNAL Database 답변은 Raw Rows가 아닌 사용자에게 노출된 최소 요약 Fact만 검증한다.
  *  - Answer Verification 결과를 Evaluation DB에 저장한다.
  *  - 채팅 처리 중 사용자에게 노출 가능한 진행 상태를 ChatProgressReporter를 통해 전달한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
@@ -33,6 +34,8 @@ import com.example.enterpriseai.service.evaluation.AnswerVerificationService;
 import com.example.enterpriseai.service.hybrid.HybridRagService;
 import com.example.enterpriseai.service.security.SecureVerificationEvidencePolicyProvider;
 import org.springframework.stereotype.Service;
+
+import java.util.Map;
 
 @Service
 public class AiChatService {
@@ -162,6 +165,10 @@ public class AiChatService {
 
         DatabaseQueryResult queryResult =
                 executionContext.queryResult();
+        System.out.println("=== DatabaseQueryResult ===");
+        System.out.println("data = " + queryResult.data());
+        System.out.println("totalCount = " + queryResult.metadata().totalCount());
+        System.out.println("returnedCount = " + queryResult.metadata().returnedCount());
 
         DatabaseResultPresentationPolicy.PresentationType presentationType =
                 presentationPolicy.determine(
@@ -180,7 +187,8 @@ public class AiChatService {
                     answerExternalDatabase(
                             question,
                             executionContext,
-                            currentUser
+                            currentUser,
+                            progressReporter
                     );
         };
     }
@@ -251,11 +259,12 @@ public class AiChatService {
         );
     }
 
-    // 대량 결과는 Raw Result를 Evidence에 저장하지 않고 resultReference로 연결한다.
+    // 대량 결과는 Raw Result 대신 사용자에게 노출된 최소 요약 Fact만 deterministic 검증한다.
     private ChatResponse answerExternalDatabase(
             String question,
             DatabaseQueryExecutionContext executionContext,
-            CurrentUser currentUser
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
     ) {
         DatabaseQueryResult queryResult =
                 executionContext.queryResult();
@@ -274,13 +283,40 @@ public class AiChatService {
                         + "건의 조회 결과가 있습니다. "
                         + "전체 결과를 조회하거나 파일로 다운로드할 수 있습니다.";
 
-        saveSecureEvidence(
-                question,
-                executionContext,
-                SecureVerificationEvidencePolicy.ResultStorageMode.REFERENCE_ONLY,
-                resultReference,
-                null,
-                answer
+        Long verificationEvidenceId =
+                saveSecureEvidence(
+                        question,
+                        executionContext,
+                        SecureVerificationEvidencePolicy.ResultStorageMode.REFERENCE_ONLY,
+                        resultReference,
+                        null,
+                        answer
+                );
+
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.ANSWER_VERIFICATION,
+                        "답변 검증 중",
+                        "verification"
+                )
+        );
+
+        Map<String, Object> verificationEvidence =
+                Map.of(
+                        "returnedCount",
+                        returnedCount
+                );
+
+        AnswerVerificationResult verificationResult =
+                answerVerificationService.verify(
+                        verificationEvidence,
+                        answer,
+                        AnswerVerificationPolicy.noneRequired()
+                );
+
+        answerVerificationPersistenceService.save(
+                verificationEvidenceId,
+                verificationResult
         );
 
         return new ChatResponse(
@@ -290,7 +326,9 @@ public class AiChatService {
                 returnedCount,
                 true,
                 resultReference,
-                true
+                true,
+                verificationResult.overallStatus(),
+                verificationResult.matchRate()
         );
     }
 
