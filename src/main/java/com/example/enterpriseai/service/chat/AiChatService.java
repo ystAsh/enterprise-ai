@@ -134,7 +134,8 @@ public class AiChatService {
             case HYBRID ->
                     hybridRagService.generateResponse(
                             question,
-                            currentUser
+                            currentUser,
+                            progressReporter
                     );
         };
     }

@@ -4,8 +4,9 @@
  * =============================================================================
  * 목적
  *  - 로그인한 사용자에게 Enterprise AI 채팅 화면을 제공한다.
- *  - 사용자 질문을 Spring Boot /api/chat API로 전달한다.
+ *  - 사용자 질문을 Spring Boot /api/chat/stream API로 전달한다.
  *  - CSRF 토큰을 포함하여 세션 기반 요청을 안전하게 처리한다.
+ *  - 채팅 처리 중 서버가 전달하는 사용자 표시용 진행 상태를 표시한다.
  *  - Gemini 답변과 검증 완료 구조화 데이터를 화면에 표시한다.
  *  - Answer Verification의 안전한 상태와 Match Rate를 답변과 함께 표시한다.
  *  - 특정 업무 필드에 종속되지 않는 동적 결과 테이블을 제공한다.
@@ -29,6 +30,19 @@ type VerificationStatus =
     | 'UNSUPPORTED'
     | 'MISSING'
 
+type ChatProgressStage =
+    | 'QUESTION_ANALYSIS'
+    | 'DOCUMENT_SEARCH'
+    | 'DATABASE_SEARCH'
+    | 'ANSWER_GENERATION'
+    | 'ANSWER_VERIFICATION'
+
+type ChatProgressEvent = {
+    stage: ChatProgressStage
+    displayText: string
+    iconKey: string
+}
+
 type ChatResponse = {
     answer: string
     data: Record<string, unknown> | null
@@ -51,6 +65,11 @@ type DatabaseResultReferenceResponse = {
     createdAt: string
 }
 
+type SseEvent = {
+    eventName: string
+    data: string
+}
+
 type TableRow = Record<string, unknown>
 
 function Chat() {
@@ -65,9 +84,9 @@ function Chat() {
         useState<VerificationStatus | null>(null)
     const [matchRate, setMatchRate] =
         useState<number | null>(null)
-
     const [downloadAvailable, setDownloadAvailable] = useState(false)
     const [loading, setLoading] = useState(false)
+    const [progressText, setProgressText] = useState('')
     const [resultLoading, setResultLoading] = useState(false)
     const [errorMessage, setErrorMessage] = useState('')
 
@@ -176,6 +195,129 @@ function Chat() {
         }
     }
 
+    // SSE 한 블록에서 event와 data만 추출한다.
+    const parseSseEvent = (eventBlock: string): SseEvent | null => {
+        let eventName = ''
+        const dataLines: string[] = []
+
+        for (const line of eventBlock.split(/\r?\n/)) {
+            if (line.startsWith('event:')) {
+                eventName = line.slice('event:'.length).trim()
+                continue
+            }
+
+            if (line.startsWith('data:')) {
+                dataLines.push(
+                    line.slice('data:'.length).trimStart()
+                )
+            }
+        }
+
+        if (!eventName || dataLines.length === 0) {
+            return null
+        }
+
+        return {
+            eventName,
+            data: dataLines.join('\n')
+        }
+    }
+
+    // 서버가 보낸 Progress와 최종 ChatResponse를 구분해 화면 상태에 반영한다.
+    const applySseEvent = (event: SseEvent): boolean => {
+        if (event.eventName === 'progress') {
+            const progress: ChatProgressEvent =
+                JSON.parse(event.data)
+
+            setProgressText(progress.displayText)
+            return false
+        }
+
+        if (event.eventName === 'result') {
+            const result: ChatResponse =
+                JSON.parse(event.data)
+
+            setAnswer(result.answer)
+            setResultData(result.data)
+            setResultReference(result.resultReference)
+            setDownloadAvailable(result.downloadAvailable)
+            setVerificationStatus(result.verificationStatus)
+            setMatchRate(result.matchRate)
+            setProgressText('')
+
+            return true
+        }
+
+        return false
+    }
+
+    // POST SSE 응답 Stream을 읽어 event 단위로 처리한다.
+    const readChatStream = async (
+        response: Response
+    ): Promise<void> => {
+        if (!response.body) {
+            throw new Error('Streaming 응답 본문이 없습니다.')
+        }
+
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+
+        let buffer = ''
+        let resultReceived = false
+
+        while (true) {
+            const { value, done } = await reader.read()
+
+            if (done) {
+                buffer += decoder.decode()
+                break
+            }
+
+            buffer += decoder.decode(value, {
+                stream: true
+            })
+
+            while (true) {
+                const boundary = buffer.match(/\r?\n\r?\n/)
+
+                if (!boundary || boundary.index === undefined) {
+                    break
+                }
+
+                const eventBlock =
+                    buffer.slice(0, boundary.index)
+
+                buffer =
+                    buffer.slice(
+                        boundary.index + boundary[0].length
+                    )
+
+                const sseEvent =
+                    parseSseEvent(eventBlock)
+
+                if (sseEvent && applySseEvent(sseEvent)) {
+                    resultReceived = true
+                }
+            }
+        }
+
+        const remainingEvent =
+            parseSseEvent(buffer.trim())
+
+        if (
+            remainingEvent
+            && applySseEvent(remainingEvent)
+        ) {
+            resultReceived = true
+        }
+
+        if (!resultReceived) {
+            throw new Error(
+                '최종 채팅 응답을 받지 못했습니다.'
+            )
+        }
+    }
+
     const tableRows = findTableRows(resultData)
     const tableColumns = findTableColumns(tableRows)
     const verificationLabel = getVerificationLabel()
@@ -191,15 +333,19 @@ function Chat() {
                 throw new Error('CSRF 토큰을 발급받지 못했습니다.')
             }
 
-            const csrf: CsrfResponse = await csrfResponse.json()
+            const csrf: CsrfResponse =
+                await csrfResponse.json()
 
-            const logoutResponse = await fetch('/api/auth/logout', {
-                method: 'POST',
-                headers: {
-                    [csrf.headerName]: csrf.token
-                },
-                credentials: 'include'
-            })
+            const logoutResponse = await fetch(
+                '/api/auth/logout',
+                {
+                    method: 'POST',
+                    headers: {
+                        [csrf.headerName]: csrf.token
+                    },
+                    credentials: 'include'
+                }
+            )
 
             if (!logoutResponse.ok) {
                 throw new Error(
@@ -287,7 +433,8 @@ function Chat() {
             }
 
             const blob = await response.blob()
-            const downloadUrl = window.URL.createObjectURL(blob)
+            const downloadUrl =
+                window.URL.createObjectURL(blob)
             const link = document.createElement('a')
 
             link.href = downloadUrl
@@ -300,73 +447,80 @@ function Chat() {
             window.URL.revokeObjectURL(downloadUrl)
         } catch (error) {
             console.error('CSV 다운로드 실패', error)
-            setErrorMessage('결과 파일을 다운로드하지 못했습니다.')
+            setErrorMessage(
+                '결과 파일을 다운로드하지 못했습니다.'
+            )
         }
     }
 
-    const handleSubmit: FormEventHandler<HTMLFormElement> = async event => {
-        event.preventDefault()
+    const handleSubmit: FormEventHandler<HTMLFormElement> =
+        async event => {
+            event.preventDefault()
 
-        const trimmedQuestion = question.trim()
+            const trimmedQuestion = question.trim()
 
-        if (!trimmedQuestion || loading) {
-            return
-        }
-
-        setLoading(true)
-        setErrorMessage('')
-        setResultData(null)
-        setResultReference(null)
-        setDownloadAvailable(false)
-        setVerificationStatus(null)
-        setMatchRate(null)
-
-        try {
-            const csrfResponse = await fetch('/api/auth/csrf', {
-                method: 'GET',
-                credentials: 'include'
-            })
-
-            if (!csrfResponse.ok) {
-                throw new Error('CSRF 토큰을 발급받지 못했습니다.')
+            if (!trimmedQuestion || loading) {
+                return
             }
 
-            const csrf: CsrfResponse = await csrfResponse.json()
+            setLoading(true)
+            setProgressText('')
+            setErrorMessage('')
+            setResultData(null)
+            setResultReference(null)
+            setDownloadAvailable(false)
+            setVerificationStatus(null)
+            setMatchRate(null)
 
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    [csrf.headerName]: csrf.token
-                },
-                credentials: 'include',
-                body: JSON.stringify({
-                    question: trimmedQuestion
-                })
-            })
+            try {
+                const csrfResponse =
+                    await fetch('/api/auth/csrf', {
+                        method: 'GET',
+                        credentials: 'include'
+                    })
 
-            if (!response.ok) {
-                throw new Error(
-                    `채팅 요청 실패: ${response.status}`
+                if (!csrfResponse.ok) {
+                    throw new Error(
+                        'CSRF 토큰을 발급받지 못했습니다.'
+                    )
+                }
+
+                const csrf: CsrfResponse =
+                    await csrfResponse.json()
+
+                const response =
+                    await fetch('/api/chat/stream', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            Accept: 'text/event-stream',
+                            [csrf.headerName]: csrf.token
+                        },
+                        credentials: 'include',
+                        body: JSON.stringify({
+                            question: trimmedQuestion
+                        })
+                    })
+
+                if (!response.ok) {
+                    throw new Error(
+                        `채팅 요청 실패: ${response.status}`
+                    )
+                }
+
+                await readChatStream(response)
+
+                setQuestion('')
+            } catch (error) {
+                console.error('채팅 요청 실패', error)
+                setProgressText('')
+                setErrorMessage(
+                    '답변을 가져오지 못했습니다.'
                 )
+            } finally {
+                setLoading(false)
             }
-
-            const result: ChatResponse = await response.json()
-
-            setAnswer(result.answer)
-            setResultData(result.data)
-            setResultReference(result.resultReference)
-            setDownloadAvailable(result.downloadAvailable)
-            setVerificationStatus(result.verificationStatus)
-            setMatchRate(result.matchRate)
-            setQuestion('')
-        } catch (error) {
-            console.error('채팅 요청 실패', error)
-            setErrorMessage('답변을 가져오지 못했습니다.')
-        } finally {
-            setLoading(false)
         }
-    }
 
     return (
         <main className="chat-page">
@@ -424,7 +578,10 @@ function Chat() {
                             <div className="message-avatar">AI</div>
 
                             <div className="message-content">
-                                <p>답변을 생성하고 있습니다...</p>
+                                <p>
+                                    {progressText
+                                        || '답변을 준비하고 있습니다...'}
+                                </p>
                             </div>
                         </div>
                     )}
@@ -437,7 +594,9 @@ function Chat() {
                                 <strong>Enterprise AI</strong>
 
                                 <div className="message-markdown">
-                                    <ReactMarkdown>{answer}</ReactMarkdown>
+                                    <ReactMarkdown>
+                                        {answer}
+                                    </ReactMarkdown>
                                 </div>
 
                                 {verificationLabel && (
@@ -527,7 +686,9 @@ function Chat() {
                     <textarea
                         className="chat-input"
                         value={question}
-                        onChange={event => setQuestion(event.target.value)}
+                        onChange={event =>
+                            setQuestion(event.target.value)
+                        }
                         placeholder="질문을 입력하세요."
                         rows={3}
                         disabled={loading}
@@ -543,7 +704,9 @@ function Chat() {
                             className="chat-send-button"
                             disabled={!question.trim() || loading}
                         >
-                            {loading ? '답변 생성 중...' : '질문하기'}
+                            {loading
+                                ? '답변 생성 중...'
+                                : '질문하기'}
                         </button>
                     </div>
                 </form>
