@@ -11,6 +11,7 @@
  *  - Database 실행 근거와 실제 답변을 Secure Verification Evidence로 저장한다.
  *  - INLINE Database 답변은 검증 완료 Evidence 기준으로 deterministic Answer Verification을 수행한다.
  *  - Answer Verification 결과를 Evaluation DB에 저장한다.
+ *  - 채팅 처리 중 사용자에게 노출 가능한 진행 상태를 ChatProgressReporter를 통해 전달한다.
  *  - 특정 회사나 업무 도메인에 종속되지 않는다.
  */
 
@@ -18,6 +19,7 @@ package com.example.enterpriseai.service.chat;
 
 import com.example.enterpriseai.dto.AnswerVerificationPolicy;
 import com.example.enterpriseai.dto.AnswerVerificationResult;
+import com.example.enterpriseai.dto.ChatProgressEvent;
 import com.example.enterpriseai.dto.ChatResponse;
 import com.example.enterpriseai.dto.DatabaseQueryExecutionContext;
 import com.example.enterpriseai.dto.DatabaseQueryResult;
@@ -87,7 +89,27 @@ public class AiChatService {
             String question,
             CurrentUser currentUser
     ) {
-        validateInput(question, currentUser);
+        return generateResponse(
+                question,
+                currentUser,
+                ChatProgressReporter.NO_OP
+        );
+    }
+
+    public ChatResponse generateResponse(
+            String question,
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
+    ) {
+        validateInput(question, currentUser, progressReporter);
+
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.QUESTION_ANALYSIS,
+                        "질문 분석 중",
+                        "analysis"
+                )
+        );
 
         QuestionRouterService.QuestionType questionType =
                 questionRouterService.route(question);
@@ -97,14 +119,16 @@ public class AiChatService {
                     new ChatResponse(
                             documentRagService.answer(
                                     question,
-                                    currentUser
+                                    currentUser,
+                                    progressReporter
                             )
                     );
 
             case DATABASE ->
                     answerDatabase(
                             question,
-                            currentUser
+                            currentUser,
+                            progressReporter
                     );
 
             case HYBRID ->
@@ -118,8 +142,17 @@ public class AiChatService {
     // 검증 완료 Database 결과 크기에 따라 INLINE / EXTERNAL 경로를 분리한다.
     private ChatResponse answerDatabase(
             String question,
-            CurrentUser currentUser
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
     ) {
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.DATABASE_SEARCH,
+                        "사내 데이터 조회 중",
+                        "database"
+                )
+        );
+
         DatabaseQueryExecutionContext executionContext =
                 databaseQueryRequestService.executeWithContext(
                         question,
@@ -138,7 +171,8 @@ public class AiChatService {
             case INLINE ->
                     answerInlineDatabase(
                             question,
-                            executionContext
+                            executionContext,
+                            progressReporter
                     );
 
             case EXTERNAL ->
@@ -153,10 +187,19 @@ public class AiChatService {
     // 소량 결과는 Gemini 답변 생성 후 Secure Evidence 저장과 deterministic 검증을 수행한다.
     private ChatResponse answerInlineDatabase(
             String question,
-            DatabaseQueryExecutionContext executionContext
+            DatabaseQueryExecutionContext executionContext,
+            ChatProgressReporter progressReporter
     ) {
         DatabaseQueryResult queryResult =
                 executionContext.queryResult();
+
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.ANSWER_GENERATION,
+                        "답변 생성 중",
+                        "answer"
+                )
+        );
 
         DatabaseRagService.DatabaseRagAnswer ragAnswer =
                 databaseRagService.answerWithContext(
@@ -173,6 +216,14 @@ public class AiChatService {
                         ragAnswer.llmContext(),
                         ragAnswer.answer()
                 );
+
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.ANSWER_VERIFICATION,
+                        "답변 검증 중",
+                        "verification"
+                )
+        );
 
         AnswerVerificationResult verificationResult =
                 answerVerificationService.verify(
@@ -288,7 +339,8 @@ public class AiChatService {
 
     private void validateInput(
             String question,
-            CurrentUser currentUser
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
     ) {
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException(
@@ -299,6 +351,12 @@ public class AiChatService {
         if (currentUser == null) {
             throw new SecurityException(
                     "인증된 사용자가 없습니다."
+            );
+        }
+
+        if (progressReporter == null) {
+            throw new IllegalArgumentException(
+                    "progressReporter must not be null"
             );
         }
     }

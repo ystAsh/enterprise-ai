@@ -7,11 +7,14 @@
  *  - 권한 검증이 완료된 문서 Chunk만 최소 Context로 구성한다.
  *  - 검증 완료 Context를 Document RAG와 Hybrid RAG에서 재사용할 수 있게 제공한다.
  *  - 검증된 Context와 사용자 질문을 Gemini에 전달하여 최종 답변을 생성한다.
+ *  - 문서 검색과 답변 생성 진행 상태를 ChatProgressReporter를 통해 전달한다.
  */
 
 package com.example.enterpriseai.service.document;
 
+import com.example.enterpriseai.dto.ChatProgressEvent;
 import com.example.enterpriseai.security.CurrentUser;
+import com.example.enterpriseai.service.chat.ChatProgressReporter;
 import com.example.enterpriseai.service.vector.DocumentVectorSearchService;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.document.Document;
@@ -41,11 +44,39 @@ public class DocumentRagService {
             String question,
             CurrentUser currentUser
     ) {
-        String context = buildValidatedContext(question, currentUser);
+        return answer(
+                question,
+                currentUser,
+                ChatProgressReporter.NO_OP
+        );
+    }
+
+    // 문서 검색과 답변 생성 진행 상태를 전달하며 Gemini 답변을 생성한다.
+    public String answer(
+            String question,
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
+    ) {
+        validateInput(question, currentUser, progressReporter);
+
+        String context =
+                buildValidatedContext(
+                        question,
+                        currentUser,
+                        progressReporter
+                );
 
         if (context.isBlank()) {
             return "현재 접근 가능한 정보에서 관련 내용을 찾을 수 없습니다.";
         }
+
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.ANSWER_GENERATION,
+                        "답변 생성 중",
+                        "answer"
+                )
+        );
 
         return chatClient.prompt()
                 .system("""
@@ -61,7 +92,6 @@ public class DocumentRagService {
                 .user("""
                         [사용자 질문]
                         %s
-
                         [검증된 문서 내용]
                         %s
                         """.formatted(
@@ -77,7 +107,28 @@ public class DocumentRagService {
             String question,
             CurrentUser currentUser
     ) {
-        validateInput(question, currentUser);
+        return buildValidatedContext(
+                question,
+                currentUser,
+                ChatProgressReporter.NO_OP
+        );
+    }
+
+    // 문서 검색 진행 상태를 전달하고 검증 완료 Chunk만 최소 Context로 구성한다.
+    public String buildValidatedContext(
+            String question,
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
+    ) {
+        validateInput(question, currentUser, progressReporter);
+
+        progressReporter.report(
+                new ChatProgressEvent(
+                        ChatProgressEvent.Stage.DOCUMENT_SEARCH,
+                        "사내 문서 검색 중",
+                        "document"
+                )
+        );
 
         List<Document> documents =
                 documentVectorSearchService.search(
@@ -96,10 +147,11 @@ public class DocumentRagService {
                 : context.trim();
     }
 
-    // Gemini 호출 전에 질문과 인증 사용자를 확인한다.
+    // Gemini 호출 전에 질문, 인증 사용자, Progress Reporter를 확인한다.
     private void validateInput(
             String question,
-            CurrentUser currentUser
+            CurrentUser currentUser,
+            ChatProgressReporter progressReporter
     ) {
         if (question == null || question.isBlank()) {
             throw new IllegalArgumentException(
@@ -110,6 +162,12 @@ public class DocumentRagService {
         if (currentUser == null) {
             throw new SecurityException(
                     "인증된 사용자가 없습니다."
+            );
+        }
+
+        if (progressReporter == null) {
+            throw new IllegalArgumentException(
+                    "progressReporter must not be null"
             );
         }
     }
